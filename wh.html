@@ -105,6 +105,13 @@ function writeField(dk,field,val){
 }
 
 function mkSel(type,currentVal,options,placeholder,dk,field){
+  if(!unlocked){
+    // Read-only display
+    var span=document.createElement("span");
+    span.style.cssText="font-family:'Share Tech Mono',monospace;font-size:12px;color:"+(currentVal?(type==="vd"?"#c9a84c":"#fff"):"#2a3440")+";letter-spacing:1px;padding:5px 0;display:inline-block;min-width:130px";
+    span.textContent=currentVal||"—";
+    return span;
+  }
   var sel=document.createElement("select");
   sel.className=type+(currentVal?" has-val":"");
   var opt0=document.createElement("option");opt0.value="";opt0.textContent=placeholder;sel.appendChild(opt0);
@@ -114,7 +121,6 @@ function mkSel(type,currentVal,options,placeholder,dk,field){
     sel.appendChild(op);
   });
   sel.onchange=function(){
-    if(!unlocked)return;
     var val=sel.value;
     sel.className=type+(val?" has-val":"");
     writeField(dk,field,val);
@@ -193,7 +199,17 @@ function renderNav(){
 
 function renderPin(){
   var area=document.getElementById("pin-area");area.innerHTML="";
-  if(unlocked)return;
+  if(unlocked){
+    var notice=document.createElement("div");
+    notice.style.cssText="background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);padding:8px 14px;margin-bottom:14px;font-size:10px;color:#2ecc71;letter-spacing:2px";
+    notice.textContent="🔓 EDIT MODE — ALL CHANGES SAVE INSTANTLY";
+    area.appendChild(notice);
+    return;
+  }
+  var viewNotice=document.createElement("div");
+  viewNotice.style.cssText="background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.2);padding:8px 14px;margin-bottom:14px;font-size:10px;color:#c9a84c;letter-spacing:2px";
+  viewNotice.textContent="👁 VIEW MODE — ENTER PIN ABOVE TO EDIT";
+  area.appendChild(viewNotice);
   var wrap=document.createElement("div");wrap.className="pin-wrap";
   var title=document.createElement("div");title.className="pin-title";title.textContent="ENTER PIN TO EDIT";
   var dots=document.createElement("div");dots.className="pin-dots";
@@ -213,12 +229,10 @@ function renderPin(){
 function render(){
   renderNav();
   renderPin();
-  if(unlocked) renderDays();
-  else{var a=document.getElementById("days-area");a.innerHTML='<div class="spin">ENTER PIN TO VIEW AND EDIT SHIFTS</div>';}
+  renderDays(); // always show - just read-only when locked
 }
 
 render();
 </script>
 </body>
 </html>
-
