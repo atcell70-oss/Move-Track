@@ -162,6 +162,14 @@ function App(){
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
   const [picker,setPicker] = useState(null);
+  const [whShifts,setWhShifts] = useState({});
+  const [weekStart,setWeekStart] = useState(()=>{
+    const n=new Date(new Date().getTime()+3*3600000);
+    const day=n.getUTCDay();
+    const diff=(day===6)?0:(day+1)%7;
+    const sat=new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()-diff));
+    return sat.getTime();
+  });
   const [dragSrc,setDragSrc] = useState(null);
   const [dragOver,setDragOver] = useState(null);
   const rowsRef = useRef(rows);
@@ -185,9 +193,11 @@ function App(){
     const fcRef = db.ref("fuelcards");
     fcRef.on("value",snap=>{
       const data=snap.val()||{};
-      setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",...(data[i]||{})})));
+      setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",...(data[i]||{})})));
     });
-    return()=>{clearInterval(clk);boardRef.off();locRef.off();vRef.off();fcRef.off();};
+    const whRef = db.ref("whshifts");
+    whRef.on("value",snap=>{ setWhShifts(snap.val()||{}); });
+    return()=>{clearInterval(clk);boardRef.off();locRef.off();vRef.off();fcRef.off();whRef.off();};
   },[]);
 
   const writeField = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
@@ -199,6 +209,7 @@ function App(){
   };
   const writeVehicle = (i,field,value) => { const u={}; u[field]=value; db.ref("vehicles/"+i).update(u); };
   const writeFuelCard = (i,field,value) => { const u={}; u[field]=value; db.ref("fuelcards/"+i).update(u); };
+  const writeWH = (weekKey,dayKey,field,value) => { const u={}; u[field]=value; db.ref("whshifts/"+weekKey+"/"+dayKey).update(u); };
 
   const updateRow = (i,field,val) => {
     setRows(prev=>{ const n=[...prev]; n[i]={...n[i],[field]:val}; if(field==="status"&&val==="IN"){n[i].dueBack="";n[i].dueDate="";} return n; });
@@ -319,6 +330,7 @@ function App(){
         <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>Locations ({locs.length})</button>
         <button style={s.tab(tab==="vehicles")} onClick={()=>setTab("vehicles")}>Vehicles</button>
         <button style={s.tab(tab==="fuelcards")} onClick={()=>setTab("fuelcards")}>Fuel Cards</button>
+        <button style={s.tab(tab==="wh")} onClick={()=>setTab("wh")}>WH Shifts</button>
       </div>
 
       <div style={s.body}>
@@ -459,7 +471,7 @@ function App(){
                 {vehicles.map((v,i)=>(
                   <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
                     <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
-                    {["make","model","colour","vrn","name"].map(field=>(
+                    {["make","model","colour","vrn"].map(field=>(
                       <td key={field} style={{...s.td,minWidth:"100px"}}>
                         <input
                           style={{...s.inp,textTransform:field==="vrn"?"uppercase":"none",letterSpacing:field==="vrn"?"2px":"normal"}}
@@ -475,6 +487,16 @@ function App(){
                         />
                       </td>
                     ))}
+                    <td style={{...s.td,minWidth:"130px"}}>
+                      <select
+                        value={v.name||""}
+                        onChange={e=>{const val=e.target.value;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],name:val};return n;});writeVehicle(i,"name",val);}}
+                        style={{appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:v.name?"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}
+                      >
+                        <option value="">— SELECT —</option>
+                        {rows.filter(r=>r.name).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
+                      </select>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -487,7 +509,7 @@ function App(){
           <div style={s.hint}>FUEL CARD REGISTER — 30 SLOTS // ALL CHANGES SYNC INSTANTLY</div>
           <div style={s.tw}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr>{["#","Fuel Card Number","Name / Holder"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+              <thead><tr>{["#","Fuel Card Number","Name / Holder","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
                 {fuelCards.map((fc,i)=>(
                   <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
@@ -505,18 +527,23 @@ function App(){
                         }}
                       />
                     </td>
-                    <td style={{...s.td,minWidth:"180px"}}>
-                      <input
-                        style={s.inp}
+                    <td style={{...s.td,minWidth:"160px"}}>
+                      <select
                         value={fc.name||""}
-                        placeholder="NAME / HOLDER"
-                        maxLength={30}
-                        onChange={e=>{
-                          const val=e.target.value.toUpperCase();
-                          e.target.value=val;
-                          setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],name:val};return n;});
-                          writeFuelCard(i,"name",val);
-                        }}
+                        onChange={e=>{const val=e.target.value;setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],name:val};return n;});writeFuelCard(i,"name",val);}}
+                        style={{appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:fc.name?"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}
+                      >
+                        <option value="">— SELECT —</option>
+                        {rows.filter(r=>r.name).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
+                      </select>
+                    </td>
+                    <td style={{...s.td,minWidth:"160px"}}>
+                      <input
+                        style={s.notesInp}
+                        value={fc.notes||""}
+                        placeholder="Notes..."
+                        maxLength={80}
+                        onChange={e=>{const val=e.target.value;setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],notes:val};return n;});writeFuelCard(i,"notes",val);}}
                       />
                     </td>
                   </tr>
@@ -525,6 +552,126 @@ function App(){
             </table>
           </div>
         </>}
+
+        {/* ── WH SHIFTS TAB ── */}
+        {tab==="wh"&&(()=>{
+          const DAYS=["SAT","SUN","MON","TUE","WED","THU","FRI"];
+          const boardNames=rows.filter(r=>r.name).map(r=>r.name);
+          const vehicleList=vehicles.filter(v=>v.vrn).map(v=>v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:""));
+          const weekKey="w"+weekStart;
+          const weekDates=Array.from({length:7},(_,i)=>{
+            const d=new Date(weekStart+i*86400000);
+            return{label:DAYS[i],date:d.getUTCDate(),month:MONTHS[d.getUTCMonth()],key:DAYS[i].toLowerCase()};
+          });
+          const prevWeek=()=>setWeekStart(w=>w-7*86400000);
+          const nextWeek=()=>setWeekStart(w=>w+7*86400000);
+          const startD=weekDates[0];const endD=weekDates[6];
+          const NameDrop=({val,onChange,placeholder})=>(
+            <select
+              value={val||""}
+              onChange={e=>onChange(e.target.value)}
+              style={{...s.sel("",[]),fontFamily:f.mono,fontSize:"11px",width:"100%",minWidth:"120px",background:"#080a0d",border:"1px solid #1e2630",color:val?"#fff":"#5a6a7a"}}
+            >
+              <option value="">{placeholder||"— SELECT —"}</option>
+              {boardNames.map(n=><option key={n} value={n}>{n}</option>)}
+            </select>
+          );
+          const VehDrop=({val,onChange})=>(
+            <select
+              value={val||""}
+              onChange={e=>onChange(e.target.value)}
+              style={{...s.sel("",[]),fontFamily:f.mono,fontSize:"11px",width:"100%",minWidth:"120px",background:"#080a0d",border:"1px solid #1e2630",color:val?"#c9a84c":"#5a6a7a"}}
+            >
+              <option value="">— SELECT VEH —</option>
+              {vehicleList.map(v=><option key={v} value={v}>{v}</option>)}
+            </select>
+          );
+          const getDay=(dayKey)=>((whShifts[weekKey]||{})[dayKey]||{});
+          const setDay=(dayKey,field,val)=>{
+            setWhShifts(prev=>{
+              const n={...prev};
+              n[weekKey]={...(n[weekKey]||{})};
+              n[weekKey][dayKey]={...(n[weekKey][dayKey]||{}),[field]:val};
+              return n;
+            });
+            writeWH(weekKey,dayKey,field,val);
+          };
+          return <>
+            {/* Week nav */}
+            <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px",flexWrap:"wrap"}}>
+              <button onClick={prevWeek} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:f.mono,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>◀ PREV</button>
+              <div style={{color:"#fff",fontFamily:f.sans,fontSize:"18px",fontWeight:"900",letterSpacing:"3px"}}>
+                {startD.date} {startD.month} — {endD.date} {endD.month}
+              </div>
+              <button onClick={nextWeek} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:f.mono,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>NEXT ▶</button>
+            </div>
+
+            {/* Day cards */}
+            {weekDates.map(({label,date,month,key})=>{
+              const d=getDay(key);
+              const secHdr={fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",margin:"12px 0 8px",textTransform:"uppercase"};
+              const fieldRow={display:"flex",gap:"8px",marginBottom:"8px",flexWrap:"wrap",alignItems:"center"};
+              const fieldLbl={fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"80px",flexShrink:0};
+              const paxInp={background:"#080a0d",border:"1px solid #1e2630",color:"#fff",fontFamily:f.mono,fontSize:"11px",padding:"4px 7px",outline:"none",width:"120px"};
+              return <div key={key} style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
+                {/* Day header */}
+                <div style={{display:"flex",alignItems:"baseline",gap:"10px",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"4px"}}>
+                  <span style={{fontFamily:f.sans,fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>{label}</span>
+                  <span style={{fontFamily:f.mono,fontSize:"12px",color:"#5a6a7a",letterSpacing:"2px"}}>{date} {month}</span>
+                </div>
+
+                {/* WH Shift */}
+                <div style={secHdr}>WH SHIFT</div>
+                <div style={fieldRow}>
+                  <span style={fieldLbl}>PERSON 1</span>
+                  <NameDrop val={d.shift1} onChange={v=>setDay(key,"shift1",v)} placeholder="— SELECT —"/>
+                </div>
+                <div style={fieldRow}>
+                  <span style={fieldLbl}>PERSON 2</span>
+                  <NameDrop val={d.shift2} onChange={v=>setDay(key,"shift2",v)} placeholder="— SELECT —"/>
+                </div>
+
+                {/* Courier */}
+                <div style={secHdr}>COURIER</div>
+                <div style={fieldRow}>
+                  <span style={fieldLbl}>PERSON</span>
+                  <NameDrop val={d.courierPerson} onChange={v=>setDay(key,"courierPerson",v)}/>
+                </div>
+                <div style={fieldRow}>
+                  <span style={fieldLbl}>VEHICLE</span>
+                  <VehDrop val={d.courierVeh} onChange={v=>setDay(key,"courierVeh",v)}/>
+                </div>
+                <div style={{marginBottom:"6px"}}>
+                  <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"6px"}}>PAX (UP TO 4)</div>
+                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                    {[1,2,3,4].map(n=>(
+                      <NameDrop key={n} val={d["courierPax"+n]} onChange={v=>setDay(key,"courierPax"+n,v)} placeholder={"PAX "+n}/>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Escort */}
+                <div style={secHdr}>ESCORT</div>
+                <div style={fieldRow}>
+                  <span style={fieldLbl}>PERSON</span>
+                  <NameDrop val={d.escortPerson} onChange={v=>setDay(key,"escortPerson",v)}/>
+                </div>
+                <div style={fieldRow}>
+                  <span style={fieldLbl}>VEHICLE</span>
+                  <VehDrop val={d.escortVeh} onChange={v=>setDay(key,"escortVeh",v)}/>
+                </div>
+                <div style={{marginBottom:"6px"}}>
+                  <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"6px"}}>PAX (UP TO 4)</div>
+                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                    {[1,2,3,4].map(n=>(
+                      <NameDrop key={n} val={d["escortPax"+n]} onChange={v=>setDay(key,"escortPax"+n,v)} placeholder={"PAX "+n}/>
+                    ))}
+                  </div>
+                </div>
+              </div>;
+            })}
+          </>;
+        })()}
 
       </div>
 
