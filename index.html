@@ -162,6 +162,8 @@ function App(){
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
   const [picker,setPicker] = useState(null);
+  const [dragSrc,setDragSrc] = useState(null);
+  const [dragOver,setDragOver] = useState(null);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
 
@@ -190,6 +192,11 @@ function App(){
 
   const writeField = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
   const writeLocs = l => db.ref("locations").set(l);
+  const writeAllRows = (newRows) => {
+    const updates={};
+    newRows.forEach((r,i)=>{ updates[i]={...r,id:i+1}; });
+    db.ref("board").set(updates);
+  };
   const writeVehicle = (i,field,value) => { const u={}; u[field]=value; db.ref("vehicles/"+i).update(u); };
   const writeFuelCard = (i,field,value) => { const u={}; u[field]=value; db.ref("fuelcards/"+i).update(u); };
 
@@ -265,6 +272,8 @@ function App(){
     hint:{marginBottom:"16px",fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"},
     secTitle:{margin:"18px 0 10px",fontSize:"10px",color:"#c9a84c",letterSpacing:"3px"},
     warnBox:{marginTop:"16px",background:"rgba(231,76,60,0.06)",border:"1px solid rgba(231,76,60,0.2)",padding:"10px 14px",fontSize:"11px",color:"#8a9aaa"},
+    dragHandle:{color:"#2a3440",cursor:"grab",fontSize:"16px",padding:"0 4px",userSelect:"none",WebkitUserSelect:"none",touchAction:"none"},
+    dragOver:{background:"rgba(201,168,76,0.08)",outline:"1px solid #c9a84c44"},
   };
 
   const SDEFS=[
@@ -340,13 +349,53 @@ function App(){
           </div>}
           <div style={s.tw}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr>{["#","Name","Location","Status","Due Back (BHR)","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+              <thead><tr><th style={s.th}></th>{["#","Name","Location","Status","Due Back (BHR)","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.map((r,i)=>{
                   const od=isOvd(r);
                   const dis=r.status==="IN"||r.status==="";
                   const dueLabel = r.dueBack ? (r.dueDate ? r.dueDate+" "+r.dueBack : r.dueBack) : "— : —";
-                  return <tr key={i} style={{background:od?"rgba(231,76,60,0.07)":"transparent",borderBottom:"1px solid rgba(30,38,48,0.7)",animation:od?"rp 2s infinite":undefined}}>
+                  const isDragOver = dragOver===i;
+                  return <tr key={i}
+                    data-idx={i}
+                    draggable
+                    onDragStart={()=>setDragSrc(i)}
+                    onDragOver={e=>{e.preventDefault();setDragOver(i);}}
+                    onDragLeave={()=>setDragOver(null)}
+                    onDrop={e=>{
+                      e.preventDefault();
+                      if(dragSrc===null||dragSrc===i){setDragSrc(null);setDragOver(null);return;}
+                      const newRows=[...rowsRef.current];
+                      const [moved]=newRows.splice(dragSrc,1);
+                      newRows.splice(i,0,moved);
+                      setRows(newRows);
+                      writeAllRows(newRows);
+                      setDragSrc(null);setDragOver(null);
+                    }}
+                    style={{background:isDragOver?"rgba(201,168,76,0.06)":od?"rgba(231,76,60,0.07)":"transparent",borderBottom:isDragOver?"1px solid #c9a84c44":"1px solid rgba(30,38,48,0.7)",animation:od&&!isDragOver?"rp 2s infinite":undefined,outline:isDragOver?"1px solid #c9a84c33":"none",opacity:dragSrc===i?0.4:1}}>
+                    <td style={{...s.td,width:"20px",padding:"8px 4px"}}>
+                      <span
+                        style={s.dragHandle}
+                        title="Drag to reorder"
+                        onTouchStart={e=>{setDragSrc(i);e.currentTarget.closest('tr').setAttribute('data-touch-drag','1');}}
+                        onTouchMove={e=>{
+                          const touch=e.touches[0];
+                          const el=document.elementFromPoint(touch.clientX,touch.clientY);
+                          const tr=el&&el.closest('tr');
+                          if(tr&&tr.dataset.idx){setDragOver(parseInt(tr.dataset.idx));}
+                        }}
+                        onTouchEnd={()=>{
+                          if(dragSrc!==null&&dragOver!==null&&dragSrc!==dragOver){
+                            const newRows=[...rowsRef.current];
+                            const [moved]=newRows.splice(dragSrc,1);
+                            newRows.splice(dragOver,0,moved);
+                            setRows(newRows);
+                            writeAllRows(newRows);
+                          }
+                          setDragSrc(null);setDragOver(null);
+                        }}
+                      >⠿</span>
+                    </td>
                     <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
                     <td style={{...s.td,minWidth:"130px"}}>
                       <input style={s.inp} value={r.name} placeholder="—" onChange={e=>updateRow(i,"name",e.target.value.toUpperCase())} maxLength={25}/>
