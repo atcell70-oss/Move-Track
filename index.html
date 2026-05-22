@@ -185,14 +185,14 @@ function DayCard({dayLabel,date,month,dayKey,weekKey,dayData,boardNames,vehicleL
   const vd = {...nd,color:"#c9a84c",borderColor:"#c9a84c33"};
 
   const ND = ({fld,placeholder}) => (
-    <select value={data[fld]||""} onChange={e=>{if(unlocked)set(fld,e.target.value);}} disabled={!unlocked} style={{...nd,color:data[fld]?"#fff":"#5a6a7a"}}>
+    <select value={data[fld]||""} onChange={e=>{if(unlocked){set(fld,e.target.value);}else{e.target.value=data[fld]||"";}}} style={{...nd,color:data[fld]?"#fff":"#5a6a7a"}}>
       <option value="">{placeholder||"— SELECT —"}</option>
       {boardNames.map(n=><option key={n} value={n}>{n}</option>)}
     </select>
   );
 
   const VD = ({fld}) => (
-    <select value={data[fld]||""} onChange={e=>{if(unlocked)set(fld,e.target.value);}} disabled={!unlocked} style={{...vd,color:data[fld]?"#c9a84c":"#5a6a7a"}}>
+    <select value={data[fld]||""} onChange={e=>{if(unlocked){set(fld,e.target.value);}else{e.target.value=data[fld]||"";}}} style={{...vd,color:data[fld]?"#c9a84c":"#5a6a7a"}}>
       <option value="">— SELECT VEH —</option>
       {vehicleList.map(v=><option key={v.value} value={v.value}>{v.label}</option>)}
     </select>
@@ -741,3 +741,4 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
+
