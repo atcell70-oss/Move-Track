@@ -17,7 +17,6 @@ body{background:#080a0d;color:#d4dde8}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
 #root{position:relative;z-index:1}
 select{-webkit-appearance:none;appearance:none}
-/* Picker scrollbar hide */
 .pcol{-ms-overflow-style:none;scrollbar-width:none}
 .pcol::-webkit-scrollbar{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -42,60 +41,108 @@ const SCOL = {
   TASKING:{color:"#9b59b6",bg:"rgba(155,89,182,0.15)"},
   "":{color:"#5a6a7a",bg:"transparent"},
 };
+const MONTHS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
 const pad = n => String(n).padStart(2,"0");
 const bhrNow = () => { const n=new Date(),h=(n.getUTCHours()+3)%24; return `${pad(h)}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())}`; };
 const zuluNow = () => { const n=new Date(); return `${pad(n.getUTCHours())}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())}`; };
 const nowMins = () => { const n=new Date(); return ((n.getUTCHours()+3)%24)*60+n.getUTCMinutes(); };
 const toMins = t => { if(!t||!t.includes(":"))return null; const[h,m]=t.split(":").map(Number); return h*60+m; };
-const isOvd = r => { if(!r||!r.dueBack||r.status==="IN"||!r.status)return false; const m=toMins(r.dueBack); return m!==null&&nowMins()>m; };
+const isOvd = r => {
+  if(!r||!r.dueBack||r.status==="IN"||!r.status)return false;
+  const now=new Date();
+  const nowBhr=new Date(now.getTime()+3*3600000);
+  if(r.dueDate){
+    const[d,mo]=r.dueDate.split("/").map(Number);
+    const dueD=new Date(Date.UTC(nowBhr.getUTCFullYear(),mo-1,d));
+    const todayD=new Date(Date.UTC(nowBhr.getUTCFullYear(),nowBhr.getUTCMonth(),nowBhr.getUTCDate()));
+    if(dueD>todayD)return false;
+    if(dueD<todayD)return true;
+  }
+  const m=toMins(r.dueBack); return m!==null&&nowMins()>m;
+};
 const ovdStr = r => { const d=nowMins()-toMins(r.dueBack),h=Math.floor(d/60),m=d%60; return h>0?`+${h}H ${m}M`:`+${m}M`; };
-const locCol = (l,locs) => { const i=locs.indexOf(l); return i>=0?PAL[i%PAL.length]:"#5a6a7a"; };
 
-const {useState,useEffect,useRef,useCallback} = React;
+const {useState,useEffect,useRef} = React;
 
-// ── TIME PICKER ──
-function TimePicker({time, onConfirm, onClear, onClose}){
+// ── TIME + DATE PICKER ──
+function TimePicker({time, date, onConfirm, onClear, onClose}){
   const [h, setH] = React.useState(parseInt((time||"00:00").split(":")[0])||0);
   const [m, setM] = React.useState(parseInt((time||"00:00").split(":")[1])||0);
+  const now = new Date(new Date().getTime()+3*3600000);
+  const [day, setDay] = React.useState(date?parseInt(date.split("/")[0]):now.getUTCDate());
+  const [mon, setMon] = React.useState(date?parseInt(date.split("/")[1])-1:now.getUTCMonth());
 
-  const hours = Array.from({length:24},(_,i)=>i);
-  const mins = Array.from({length:60},(_,i)=>i);
+  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(),mon+1,0)).getUTCDate();
+  const days = Array.from({length:daysInMonth},(_,i)=>i+1);
+
+  const fnt = "'Share Tech Mono',monospace";
+  const btnStyle = (sel) => ({
+    background:sel?"rgba(201,168,76,0.2)":"#080a0d",
+    border:`1px solid ${sel?"#c9a84c":"#1e2630"}`,
+    color:sel?"#c9a84c":"#5a6a7a",
+    fontFamily:fnt,fontSize:"12px",padding:"6px 8px",
+    cursor:"pointer",minWidth:"40px",letterSpacing:"1px"
+  });
+  const lbl = {fontSize:"9px",color:"#5a6a7a",letterSpacing:"3px",marginBottom:"8px"};
 
   return (
-    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
-      <div style={{background:"#0f1318",border:"1px solid #c9a84c",width:"100%",maxWidth:"360px",fontFamily:"'Share Tech Mono',monospace"}}>
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",overflowY:"auto"}}>
+      <div style={{background:"#0f1318",border:"1px solid #c9a84c",width:"100%",maxWidth:"380px",fontFamily:fnt}}>
         <div style={{background:"#0d1117",borderBottom:"1px solid #7a6330",padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{color:"#c9a84c",fontSize:"11px",letterSpacing:"3px"}}>DUE BACK TIME (BHR)</span>
+          <span style={{color:"#c9a84c",fontSize:"11px",letterSpacing:"3px"}}>DUE BACK — DATE & TIME (BHR)</span>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px",lineHeight:1}}>✕</button>
         </div>
-        <div style={{padding:"20px"}}>
-          <div style={{textAlign:"center",fontSize:"48px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",color:"#c9a84c",letterSpacing:"6px",marginBottom:"20px"}}>
-            {pad(h)}:{pad(m)}
+        <div style={{padding:"16px 20px"}}>
+          {/* Big display */}
+          <div style={{textAlign:"center",fontSize:"36px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",color:"#c9a84c",letterSpacing:"4px",marginBottom:"16px"}}>
+            {pad(day)} {MONTHS[mon]} — {pad(h)}:{pad(m)}
           </div>
-          <div style={{marginBottom:"16px"}}>
-            <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"3px",marginBottom:"8px"}}>HOUR</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
-              {hours.map(hh=>(
-                <button key={hh} onClick={()=>setH(hh)} style={{background:hh===h?"rgba(201,168,76,0.2)":"#080a0d",border:`1px solid ${hh===h?"#c9a84c":"#1e2630"}`,color:hh===h?"#c9a84c":"#5a6a7a",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",padding:"6px 8px",cursor:"pointer",minWidth:"40px",letterSpacing:"1px"}}>
-                  {pad(hh)}
-                </button>
+
+          {/* Month */}
+          <div style={{marginBottom:"14px"}}>
+            <div style={lbl}>MONTH</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
+              {MONTHS.map((mo2,i)=>(
+                <button key={i} onClick={()=>{setMon(i);const dim=new Date(Date.UTC(now.getUTCFullYear(),i+1,0)).getUTCDate();if(day>dim)setDay(dim);}} style={btnStyle(mon===i)}>{mo2}</button>
               ))}
             </div>
           </div>
+
+          {/* Day */}
+          <div style={{marginBottom:"14px"}}>
+            <div style={lbl}>DAY</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
+              {days.map(d=>(
+                <button key={d} onClick={()=>setDay(d)} style={btnStyle(day===d)}>{pad(d)}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hour */}
+          <div style={{marginBottom:"14px"}}>
+            <div style={lbl}>HOUR</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
+              {Array.from({length:24},(_,i)=>i).map(hh=>(
+                <button key={hh} onClick={()=>setH(hh)} style={btnStyle(h===hh)}>{pad(hh)}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Minute */}
           <div style={{marginBottom:"20px"}}>
-            <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"3px",marginBottom:"8px"}}>MINUTE</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+            <div style={lbl}>MINUTE</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
               {[0,5,10,15,20,25,30,35,40,45,50,55].map(mm=>(
-                <button key={mm} onClick={()=>setM(mm)} style={{background:mm===m?"rgba(201,168,76,0.2)":"#080a0d",border:`1px solid ${mm===m?"#c9a84c":"#1e2630"}`,color:mm===m?"#c9a84c":"#5a6a7a",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",padding:"6px 8px",cursor:"pointer",minWidth:"40px",letterSpacing:"1px"}}>
-                  {pad(mm)}
-                </button>
+                <button key={mm} onClick={()=>setM(mm)} style={btnStyle(m===mm)}>{pad(mm)}</button>
               ))}
             </div>
           </div>
+
+          {/* Actions */}
           <div style={{display:"flex",gap:"8px"}}>
-            <button onClick={onClear} style={{flex:1,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.4)",color:"#e74c3c",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CLEAR</button>
-            <button onClick={()=>onConfirm(pad(h)+":"+pad(m))} style={{flex:2,background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CONFIRM</button>
+            <button onClick={onClear} style={{flex:1,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.4)",color:"#e74c3c",fontFamily:fnt,fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CLEAR</button>
+            <button onClick={()=>onConfirm(pad(h)+":"+pad(m), pad(day)+"/"+pad(mon+1))} style={{flex:2,background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CONFIRM</button>
           </div>
         </div>
       </div>
@@ -104,16 +151,17 @@ function TimePicker({time, onConfirm, onClear, onClose}){
 }
 
 // ── MAIN APP ──
-// ── MAIN APP ──
 function App(){
-  const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",notes:""})));
+  const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:""})));
   const [locs,setLocs] = useState(DEFAULT_LOCS);
+  const [vehicles,setVehicles] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:""})));
+  const [fuelCards,setFuelCards] = useState(()=>Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:""})));
   const [tab,setTab] = useState("board");
   const [newLoc,setNewLoc] = useState("");
   const [bhr,setBhr] = useState(bhrNow());
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
-  const [picker,setPicker] = useState(null); // {idx, time}
+  const [picker,setPicker] = useState(null);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
 
@@ -122,21 +170,33 @@ function App(){
     const boardRef = db.ref("board");
     boardRef.on("value",snap=>{
       const data=snap.val()||{};
-      setRows(Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",notes:"",...(data[i]||{})})));
+      setRows(Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:"",...(data[i]||{})})));
       setConnected(true);
     });
     const locRef = db.ref("locations");
     locRef.on("value",snap=>{ const v=snap.val(); if(Array.isArray(v)&&v.length>0)setLocs(v); });
-    return()=>{clearInterval(clk);boardRef.off();locRef.off();};
+    const vRef = db.ref("vehicles");
+    vRef.on("value",snap=>{
+      const data=snap.val()||{};
+      setVehicles(Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",...(data[i]||{})})));
+    });
+    const fcRef = db.ref("fuelcards");
+    fcRef.on("value",snap=>{
+      const data=snap.val()||{};
+      setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",...(data[i]||{})})));
+    });
+    return()=>{clearInterval(clk);boardRef.off();locRef.off();vRef.off();fcRef.off();};
   },[]);
 
   const writeField = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
   const writeLocs = l => db.ref("locations").set(l);
+  const writeVehicle = (i,field,value) => { const u={}; u[field]=value; db.ref("vehicles/"+i).update(u); };
+  const writeFuelCard = (i,field,value) => { const u={}; u[field]=value; db.ref("fuelcards/"+i).update(u); };
 
   const updateRow = (i,field,val) => {
-    setRows(prev=>{ const n=[...prev]; n[i]={...n[i],[field]:val}; if(field==="status"&&val==="IN")n[i].dueBack=""; return n; });
+    setRows(prev=>{ const n=[...prev]; n[i]={...n[i],[field]:val}; if(field==="status"&&val==="IN"){n[i].dueBack="";n[i].dueDate="";} return n; });
     writeField(i,field,val);
-    if(field==="status"&&val==="IN") writeField(i,"dueBack","");
+    if(field==="status"&&val==="IN"){writeField(i,"dueBack","");writeField(i,"dueDate","");}
   };
 
   const addLoc = () => {
@@ -162,10 +222,7 @@ function App(){
   });
   const odRows = rows.filter(r=>r.name&&isOvd(r));
 
-  const f = {
-    mono:"'Share Tech Mono',monospace",
-    sans:"'Barlow Condensed',sans-serif",
-  };
+  const f = { mono:"'Share Tech Mono',monospace", sans:"'Barlow Condensed',sans-serif" };
 
   const s = {
     wrap:{background:"#080a0d",minHeight:"100vh",color:"#d4dde8",fontFamily:f.mono,fontSize:"13px"},
@@ -178,7 +235,7 @@ function App(){
     bhrLbl:{fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",marginTop:"2px"},
     zuluClock:{fontSize:"11px",color:"#5a6a7a",letterSpacing:"2px",marginTop:"4px"},
     filled:{color:"#c9a84c",fontSize:"11px",letterSpacing:"2px",marginTop:"4px"},
-    tabs:{display:"flex",borderBottom:"1px solid #1e2630",background:"#0a0c0f"},
+    tabs:{display:"flex",borderBottom:"1px solid #1e2630",background:"#0a0c0f",flexWrap:"wrap"},
     tab:a=>({background:a?"#0f1318":"transparent",border:"none",borderBottom:a?"2px solid #c9a84c":"2px solid transparent",color:a?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",letterSpacing:"2px",padding:"11px 20px",cursor:"pointer",textTransform:"uppercase",marginBottom:"-1px"}),
     body:{padding:"14px 20px"},
     srow:{display:"flex",gap:"8px",marginBottom:"10px",flexWrap:"wrap"},
@@ -193,7 +250,7 @@ function App(){
     td:{padding:"8px 12px",verticalAlign:"middle"},
     inp:{background:"transparent",border:"none",borderBottom:"1px solid #1e2630",color:"#fff",fontFamily:f.mono,fontSize:"12px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"110px",textTransform:"uppercase"},
     sel:(val,map)=>({appearance:"none",WebkitAppearance:"none",background:map[val]?.bg||"#0a0c0f",border:`1px solid ${map[val]?.color||"#1e2630"}55`,color:map[val]?.color||"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}),
-    tBtn:dis=>({background:dis?"transparent":"#080a0d",border:`1px solid ${dis?"#1e2630":"#c9a84c55"}`,color:dis?"#2a3440":"#c9a84c",fontFamily:f.mono,fontSize:"12px",padding:"5px 8px",cursor:dis?"not-allowed":"pointer",letterSpacing:"2px",minWidth:"70px",textAlign:"center"}),
+    tBtn:dis=>({background:dis?"transparent":"#080a0d",border:`1px solid ${dis?"#1e2630":"#c9a84c55"}`,color:dis?"#2a3440":"#c9a84c",fontFamily:f.mono,fontSize:"11px",padding:"4px 7px",cursor:dis?"not-allowed":"pointer",letterSpacing:"1px",minWidth:"100px",textAlign:"center",lineHeight:"1.4"}),
     notesInp:{background:"transparent",border:"none",borderBottom:"1px solid transparent",color:"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"100px"},
     badge:{background:"#e74c3c",color:"#fff",fontSize:"8px",padding:"1px 5px",marginLeft:"4px",letterSpacing:"1px",verticalAlign:"middle"},
     odTime:{color:"#e74c3c",fontSize:"10px",marginLeft:"4px"},
@@ -205,6 +262,9 @@ function App(){
     locChip:c=>({background:c+"14",border:`1px solid ${c}44`,color:c,fontFamily:f.mono,fontSize:"12px",letterSpacing:"1px",padding:"7px 12px",display:"flex",alignItems:"center",gap:"8px"}),
     rmBtn:{background:"transparent",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:"14px",padding:"0",lineHeight:"1"},
     connecting:{textAlign:"center",padding:"60px 20px",color:"#5a6a7a",fontSize:"12px",letterSpacing:"3px",fontFamily:f.mono},
+    hint:{marginBottom:"16px",fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"},
+    secTitle:{margin:"18px 0 10px",fontSize:"10px",color:"#c9a84c",letterSpacing:"3px"},
+    warnBox:{marginTop:"16px",background:"rgba(231,76,60,0.06)",border:"1px solid rgba(231,76,60,0.2)",padding:"10px 14px",fontSize:"11px",color:"#8a9aaa"},
   };
 
   const SDEFS=[
@@ -248,11 +308,14 @@ function App(){
       <div style={s.tabs}>
         <button style={s.tab(tab==="board")} onClick={()=>setTab("board")}>Board</button>
         <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>Locations ({locs.length})</button>
+        <button style={s.tab(tab==="vehicles")} onClick={()=>setTab("vehicles")}>Vehicles</button>
+        <button style={s.tab(tab==="fuelcards")} onClick={()=>setTab("fuelcards")}>Fuel Cards</button>
       </div>
 
       <div style={s.body}>
+
+        {/* ── BOARD TAB ── */}
         {tab==="board"&&<>
-          {/* Status stats */}
           <div style={s.srow}>
             {SDEFS.map(({key,label,color})=>{
               const n=key==="TOTAL"?filled:key==="OVERDUE"?odCount:(sCounts[key]||0);
@@ -262,8 +325,6 @@ function App(){
               </div>;
             })}
           </div>
-
-          {/* Location stats */}
           <div style={{...s.srow,marginBottom:"14px"}}>
             {locs.map((l,i)=>{
               const c=PAL[i%PAL.length],n=lCounts[l]||0;
@@ -273,14 +334,10 @@ function App(){
               </div>;
             })}
           </div>
-
-          {/* Alert */}
           {odRows.length>0&&<div style={s.alert}>
             <div style={s.alertTitle}>⚠ OVERDUE PERSONNEL DETECTED</div>
             <div>{odRows.map((r,i)=><span key={i} style={s.alertTag}>{r.name} — {ovdStr(r)}</span>)}</div>
           </div>}
-
-          {/* Table */}
           <div style={s.tw}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead><tr>{["#","Name","Location","Status","Due Back (BHR)","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
@@ -288,6 +345,7 @@ function App(){
                 {rows.map((r,i)=>{
                   const od=isOvd(r);
                   const dis=r.status==="IN"||r.status==="";
+                  const dueLabel = r.dueBack ? (r.dueDate ? r.dueDate+" "+r.dueBack : r.dueBack) : "— : —";
                   return <tr key={i} style={{background:od?"rgba(231,76,60,0.07)":"transparent",borderBottom:"1px solid rgba(30,38,48,0.7)",animation:od?"rp 2s infinite":undefined}}>
                     <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
                     <td style={{...s.td,minWidth:"130px"}}>
@@ -307,8 +365,8 @@ function App(){
                       </select>
                     </td>
                     <td style={s.td}>
-                      <button style={s.tBtn(dis)} disabled={dis} onClick={()=>!dis&&setPicker({idx:i,time:r.dueBack||"00:00"})}>
-                        {r.dueBack||"— : —"}
+                      <button style={s.tBtn(dis)} onClick={()=>!dis&&setPicker({idx:i,time:r.dueBack||"00:00",date:r.dueDate||""})}>
+                        {dueLabel}
                       </button>
                     </td>
                     <td style={{...s.td,minWidth:"110px"}}>
@@ -322,14 +380,15 @@ function App(){
           <div style={s.footer}><span style={{color:"#2ecc71"}}>⬤ LIVE</span><span>BAHRAIN TIME // 100 SLOTS</span></div>
         </>}
 
+        {/* ── LOCATIONS TAB ── */}
         {tab==="locs"&&<>
-          <div style={{marginBottom:"16px",fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"}}>ADD OR REMOVE LOCATIONS — CHANGES SYNC INSTANTLY FOR EVERYONE</div>
+          <div style={s.hint}>ADD OR REMOVE LOCATIONS — CHANGES SYNC INSTANTLY FOR EVERYONE</div>
           <div style={s.addRow}>
             <input style={s.addInp} value={newLoc} placeholder="TYPE NEW LOCATION..." onChange={e=>setNewLoc(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addLoc()} maxLength={20}/>
             <button style={s.addBtn} onClick={addLoc}>+ ADD</button>
           </div>
           <div style={{fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px"}}>Press ADD or hit Enter.</div>
-          <div style={{margin:"18px 0 10px",fontSize:"10px",color:"#c9a84c",letterSpacing:"3px"}}>CURRENT LOCATIONS ({locs.length})</div>
+          <div style={s.secTitle}>CURRENT LOCATIONS ({locs.length})</div>
           <div style={s.locGrid}>
             {locs.map((l,i)=>{const c=PAL[i%PAL.length];return(
               <div key={l} style={s.locChip(c)}>
@@ -338,16 +397,93 @@ function App(){
               </div>
             );})}
           </div>
-          <div style={{marginTop:"16px",background:"rgba(231,76,60,0.06)",border:"1px solid rgba(231,76,60,0.2)",padding:"10px 14px",fontSize:"11px",color:"#8a9aaa"}}>
-            ⚠ Removing a location clears it from any personnel currently assigned to it.
+          <div style={s.warnBox}>⚠ Removing a location clears it from any personnel currently assigned to it.</div>
+        </>}
+
+        {/* ── VEHICLES TAB ── */}
+        {tab==="vehicles"&&<>
+          <div style={s.hint}>VEHICLE REGISTER — 100 SLOTS // ALL CHANGES SYNC INSTANTLY</div>
+          <div style={s.tw}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>{["#","Make","Model","Colour","VRN","Name / User"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {vehicles.map((v,i)=>(
+                  <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
+                    <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
+                    {["make","model","colour","vrn","name"].map(field=>(
+                      <td key={field} style={{...s.td,minWidth:"100px"}}>
+                        <input
+                          style={{...s.inp,textTransform:field==="vrn"?"uppercase":"none",letterSpacing:field==="vrn"?"2px":"normal"}}
+                          value={v[field]||""}
+                          placeholder="—"
+                          maxLength={30}
+                          onChange={e=>{
+                            const val=field==="vrn"?e.target.value.toUpperCase():e.target.value;
+                            e.target.value=val;
+                            setVehicles(prev=>{const n=[...prev];n[i]={...n[i],[field]:val};return n;});
+                            writeVehicle(i,field,val);
+                          }}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>}
+
+        {/* ── FUEL CARDS TAB ── */}
+        {tab==="fuelcards"&&<>
+          <div style={s.hint}>FUEL CARD REGISTER — 30 SLOTS // ALL CHANGES SYNC INSTANTLY</div>
+          <div style={s.tw}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>{["#","Fuel Card Number","Name / Holder"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {fuelCards.map((fc,i)=>(
+                  <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
+                    <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
+                    <td style={{...s.td,minWidth:"180px"}}>
+                      <input
+                        style={{...s.inp,letterSpacing:"2px"}}
+                        value={fc.cardnum||""}
+                        placeholder="CARD NUMBER"
+                        maxLength={30}
+                        onChange={e=>{
+                          const val=e.target.value;
+                          setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],cardnum:val};return n;});
+                          writeFuelCard(i,"cardnum",val);
+                        }}
+                      />
+                    </td>
+                    <td style={{...s.td,minWidth:"180px"}}>
+                      <input
+                        style={s.inp}
+                        value={fc.name||""}
+                        placeholder="NAME / HOLDER"
+                        maxLength={30}
+                        onChange={e=>{
+                          const val=e.target.value.toUpperCase();
+                          e.target.value=val;
+                          setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],name:val};return n;});
+                          writeFuelCard(i,"name",val);
+                        }}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>}
+
       </div>
 
       {picker&&<TimePicker
         time={picker.time}
-        onConfirm={t=>{updateRow(picker.idx,"dueBack",t);setPicker(null);}}
-        onClear={()=>{updateRow(picker.idx,"dueBack","");setPicker(null);}}
+        date={picker.date}
+        onConfirm={(t,d)=>{updateRow(picker.idx,"dueBack",t);updateRow(picker.idx,"dueDate",d);setPicker(null);}}
+        onClear={()=>{updateRow(picker.idx,"dueBack","");updateRow(picker.idx,"dueDate","");setPicker(null);}}
         onClose={()=>setPicker(null)}
       />}
     </div>
