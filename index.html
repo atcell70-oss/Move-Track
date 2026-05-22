@@ -58,22 +58,23 @@ const {useState,useEffect,useRef,useCallback} = React;
 function TimePicker({time, onConfirm, onClear, onClose}){
   const initH = parseInt((time||"00:00").split(":")[0])||0;
   const initM = parseInt((time||"00:00").split(":")[1])||0;
-  const hRef = useRef(null);
-  const mRef = useRef(null);
-  const [display, setDisplay] = useState(`${pad(initH)}:${pad(initM)}`);
+  const hRef = React.useRef(null);
+  const mRef = React.useRef(null);
+  const [display, setDisplay] = React.useState(pad(initH)+":"+pad(initM));
 
-  useEffect(()=>{
-    setTimeout(()=>{
+  React.useEffect(()=>{
+    const t = setTimeout(()=>{
       if(hRef.current) hRef.current.scrollTop = initH*44;
       if(mRef.current) mRef.current.scrollTop = initM*44;
-    },50);
+    },80);
+    return ()=>clearTimeout(t);
   },[]);
 
   const getH = () => hRef.current ? Math.min(23,Math.round(hRef.current.scrollTop/44)) : initH;
   const getM = () => mRef.current ? Math.min(59,Math.round(mRef.current.scrollTop/44)) : initM;
 
-  const onHScroll = () => setDisplay(`${pad(Math.min(23,Math.round(hRef.current.scrollTop/44)))}:${pad(getM())}`);
-  const onMScroll = () => setDisplay(`${pad(getH())}:${pad(Math.min(59,Math.round(mRef.current.scrollTop/44)))}`);
+  const onHScroll = () => setDisplay(pad(Math.min(23,Math.round(hRef.current.scrollTop/44)))+":"+pad(getM()));
+  const onMScroll = () => setDisplay(pad(getH())+":"+pad(Math.min(59,Math.round(mRef.current.scrollTop/44))));
 
   const s = {
     overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"},
@@ -85,7 +86,7 @@ function TimePicker({time, onConfirm, onClear, onClose}){
     confirmBtn:{background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",letterSpacing:"2px",padding:"7px 18px",cursor:"pointer"},
     cols:{display:"flex",justifyContent:"center",alignItems:"center",padding:"10px 0",position:"relative"},
     col:{width:"90px",height:"176px",overflowY:"scroll",scrollSnapType:"y mandatory"},
-    item:(sel)=>({scrollSnapAlign:"center",height:"44px",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow Condensed',sans-serif",fontSize:"26px",fontWeight:"700",color:sel?"#c9a84c":"#5a6a7a",cursor:"pointer",letterSpacing:"2px"}),
+    item:(sel)=>({scrollSnapAlign:"center",height:"44px",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow Condensed',sans-serif",fontSize:"26px",fontWeight:"700",color:sel?"#c9a84c":"#5a6a7a",cursor:"pointer",letterSpacing:"2px",userSelect:"none",WebkitUserSelect:"none"}),
     sep:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:"32px",fontWeight:"900",color:"#c9a84c",padding:"0 4px"},
     selLine:{position:"absolute",left:"50%",transform:"translateX(-50%)",top:"50%",marginTop:"-22px",width:"182px",height:"44px",borderTop:"1px solid rgba(201,168,76,0.3)",borderBottom:"1px solid rgba(201,168,76,0.3)",pointerEvents:"none"},
     display:{textAlign:"center",fontFamily:"'Barlow Condensed',sans-serif",fontSize:"40px",fontWeight:"900",color:"#c9a84c",letterSpacing:"5px",padding:"4px 0 16px"},
@@ -98,7 +99,7 @@ function TimePicker({time, onConfirm, onClear, onClose}){
           <span style={s.title}>SET DUE BACK TIME (BHR)</span>
           <div style={s.btns}>
             <button style={s.clearBtn} onClick={onClear}>CLEAR</button>
-            <button style={s.confirmBtn} onClick={()=>onConfirm(`${pad(getH())}:${pad(getM())}`)}>CONFIRM</button>
+            <button style={s.confirmBtn} onClick={()=>onConfirm(pad(getH())+":"+pad(getM()))}>CONFIRM</button>
           </div>
         </div>
         <div style={s.cols}>
@@ -106,14 +107,14 @@ function TimePicker({time, onConfirm, onClear, onClose}){
           <div className="pcol" ref={hRef} style={s.col} onScroll={onHScroll}>
             {Array.from({length:24},(_,i)=>(
               <div key={i} style={s.item(pad(i)===display.split(":")[0])}
-                onClick={()=>{hRef.current.scrollTop=i*44;}}>{pad(i)}</div>
+                onClick={()=>{hRef.current.scrollTop=i*44;setDisplay(pad(i)+":"+display.split(":")[1]);}}>{pad(i)}</div>
             ))}
           </div>
           <div style={s.sep}>:</div>
           <div className="pcol" ref={mRef} style={s.col} onScroll={onMScroll}>
             {Array.from({length:60},(_,i)=>(
               <div key={i} style={s.item(pad(i)===display.split(":")[1])}
-                onClick={()=>{mRef.current.scrollTop=i*44;}}>{pad(i)}</div>
+                onClick={()=>{mRef.current.scrollTop=i*44;setDisplay(display.split(":")[0]+":"+pad(i));}}>{pad(i)}</div>
             ))}
           </div>
         </div>
