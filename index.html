@@ -3,22 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Moving & Tracking — BDL Status Board</title>
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;700;900&display=swap" rel="stylesheet">
+<title>Moving & Tracking</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
-  :root{--bg:#080a0d;--panel:#0f1318;--border:#1e2630;--gold:#c9a84c;--gold-dim:#7a6330;--green:#2ecc71;--red:#e74c3c;--amber:#f39c12;--blue:#3498db;--purple:#9b59b6;--text:#d4dde8;--dim:#5a6a7a}
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body,#root{min-height:100vh}
-  body{background:var(--bg);color:var(--text)}
-  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
-  #root{position:relative;z-index:1}
-  select{-webkit-appearance:none;appearance:none}
-  div::-webkit-scrollbar{display:none}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{min-height:100vh}
+body{background:#080a0d;color:#d4dde8}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+#root{position:relative;z-index:1}
+select{-webkit-appearance:none;appearance:none}
+/* Picker scrollbar hide */
+.pcol{-ms-overflow-style:none;scrollbar-width:none}
+.pcol::-webkit-scrollbar{display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes rp{0%,100%{background:rgba(231,76,60,0.07)}50%{background:rgba(231,76,60,0.13)}}
+@keyframes alertpulse{0%,100%{box-shadow:0 0 0 0 rgba(231,76,60,0.2)}50%{box-shadow:0 0 8px 2px rgba(231,76,60,0.15)}}
 </style>
 </head>
 <body>
@@ -27,10 +31,10 @@
 firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
 const db = firebase.database();
 
-const DEFAULT_LOCATIONS = ["WHITEHOUSE","BEB","BDL","OUT"];
+const DEFAULT_LOCS = ["WHITEHOUSE","BEB","BDL","OUT"];
 const STATUSES = ["IN","OUT","R&R","MEDICAL","TASKING"];
-const LOC_PALETTE = ["#c9a84c","#3498db","#2ecc71","#9b59b6","#e74c3c","#e67e22","#1abc9c","#e91e63","#00bcd4","#8bc34a"];
-const STATUS_COLOR = {
+const PAL = ["#c9a84c","#3498db","#2ecc71","#9b59b6","#e74c3c","#e67e22","#1abc9c","#e91e63","#00bcd4","#8bc34a"];
+const SCOL = {
   IN:{color:"#2ecc71",bg:"rgba(46,204,113,0.15)"},
   OUT:{color:"#e74c3c",bg:"rgba(231,76,60,0.15)"},
   "R&R":{color:"#3498db",bg:"rgba(52,152,219,0.15)"},
@@ -39,132 +43,190 @@ const STATUS_COLOR = {
   "":{color:"#5a6a7a",bg:"transparent"},
 };
 
-const defaultRows = () => Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",notes:""}));
+const pad = n => String(n).padStart(2,"0");
+const bhrNow = () => { const n=new Date(),h=(n.getUTCHours()+3)%24; return `${pad(h)}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())}`; };
+const zuluNow = () => { const n=new Date(); return `${pad(n.getUTCHours())}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())}`; };
+const nowMins = () => { const n=new Date(); return ((n.getUTCHours()+3)%24)*60+n.getUTCMinutes(); };
+const toMins = t => { if(!t||!t.includes(":"))return null; const[h,m]=t.split(":").map(Number); return h*60+m; };
+const isOvd = r => { if(!r||!r.dueBack||r.status==="IN"||!r.status)return false; const m=toMins(r.dueBack); return m!==null&&nowMins()>m; };
+const ovdStr = r => { const d=nowMins()-toMins(r.dueBack),h=Math.floor(d/60),m=d%60; return h>0?`+${h}H ${m}M`:`+${m}M`; };
+const locCol = (l,locs) => { const i=locs.indexOf(l); return i>=0?PAL[i%PAL.length]:"#5a6a7a"; };
 
-function bhrNow(){const n=new Date(),z=v=>String(v).padStart(2,"0"),h=(n.getUTCHours()+3)%24;return`${z(h)}:${z(n.getUTCMinutes())}:${z(n.getUTCSeconds())}`;}
-function zuluNow(){const n=new Date(),z=v=>String(v).padStart(2,"0");return`${z(n.getUTCHours())}:${z(n.getUTCMinutes())}:${z(n.getUTCSeconds())}`;}
-function nowMins(){const n=new Date();return((n.getUTCHours()+3)%24)*60+n.getUTCMinutes();}
-function timeMins(t){if(!t)return null;const[h,m]=t.split(":").map(Number);return h*60+m;}
-function isOverdue(r){if(!r||!r.dueBack||r.status==="IN"||!r.status)return false;return nowMins()>timeMins(r.dueBack);}
-function overdueStr(r){const diff=nowMins()-timeMins(r.dueBack),h=Math.floor(diff/60),m=diff%60;return h>0?`+${h}H ${m}M`:`+${m}M`;}
+const {useState,useEffect,useRef,useCallback} = React;
 
-const {useState,useEffect,useRef} = React;
-
-function App(){
-  const [rows,setRows]=useState(defaultRows);
-  const [locations,setLocations]=useState(DEFAULT_LOCATIONS);
-  const [tab,setTab]=useState("board");
-  const [newLoc,setNewLoc]=useState("");
-  const [bhr,setBhr]=useState(bhrNow());
-  const [zulu,setZulu]=useState(zuluNow());
-  const [connected,setConnected]=useState(false);
-  const [picker,setPicker]=useState(null);
-  const rowsRef=useRef(rows);
-  rowsRef.current=rows;
+// ── TIME PICKER ──
+function TimePicker({time, onConfirm, onClear, onClose}){
+  const initH = parseInt((time||"00:00").split(":")[0])||0;
+  const initM = parseInt((time||"00:00").split(":")[1])||0;
+  const hRef = useRef(null);
+  const mRef = useRef(null);
+  const [display, setDisplay] = useState(`${pad(initH)}:${pad(initM)}`);
 
   useEffect(()=>{
-    // Clock
-    const clk=setInterval(()=>{setBhr(bhrNow());setZulu(zuluNow());},1000);
-    // Firebase board
-    const boardRef=db.ref("board");
+    setTimeout(()=>{
+      if(hRef.current) hRef.current.scrollTop = initH*44;
+      if(mRef.current) mRef.current.scrollTop = initM*44;
+    },50);
+  },[]);
+
+  const getH = () => hRef.current ? Math.min(23,Math.round(hRef.current.scrollTop/44)) : initH;
+  const getM = () => mRef.current ? Math.min(59,Math.round(mRef.current.scrollTop/44)) : initM;
+
+  const onHScroll = () => setDisplay(`${pad(Math.min(23,Math.round(hRef.current.scrollTop/44)))}:${pad(getM())}`);
+  const onMScroll = () => setDisplay(`${pad(getH())}:${pad(Math.min(59,Math.round(mRef.current.scrollTop/44)))}`);
+
+  const s = {
+    overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"},
+    box:{background:"#0f1318",border:"1px solid #c9a84c",width:"100%",maxWidth:"420px"},
+    hdr:{background:"#0d1117",borderBottom:"1px solid #7a6330",padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"},
+    title:{color:"#c9a84c",fontSize:"11px",letterSpacing:"3px",fontFamily:"'Share Tech Mono',monospace"},
+    btns:{display:"flex",gap:"8px"},
+    clearBtn:{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.4)",color:"#e74c3c",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",letterSpacing:"1px",padding:"7px 14px",cursor:"pointer"},
+    confirmBtn:{background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",letterSpacing:"2px",padding:"7px 18px",cursor:"pointer"},
+    cols:{display:"flex",justifyContent:"center",alignItems:"center",padding:"10px 0",position:"relative"},
+    col:{width:"90px",height:"176px",overflowY:"scroll",scrollSnapType:"y mandatory"},
+    item:(sel)=>({scrollSnapAlign:"center",height:"44px",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Barlow Condensed',sans-serif",fontSize:"26px",fontWeight:"700",color:sel?"#c9a84c":"#5a6a7a",cursor:"pointer",letterSpacing:"2px"}),
+    sep:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:"32px",fontWeight:"900",color:"#c9a84c",padding:"0 4px"},
+    selLine:{position:"absolute",left:"50%",transform:"translateX(-50%)",top:"50%",marginTop:"-22px",width:"182px",height:"44px",borderTop:"1px solid rgba(201,168,76,0.3)",borderBottom:"1px solid rgba(201,168,76,0.3)",pointerEvents:"none"},
+    display:{textAlign:"center",fontFamily:"'Barlow Condensed',sans-serif",fontSize:"40px",fontWeight:"900",color:"#c9a84c",letterSpacing:"5px",padding:"4px 0 16px"},
+  };
+
+  return (
+    <div style={s.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={s.box}>
+        <div style={s.hdr}>
+          <span style={s.title}>SET DUE BACK TIME (BHR)</span>
+          <div style={s.btns}>
+            <button style={s.clearBtn} onClick={onClear}>CLEAR</button>
+            <button style={s.confirmBtn} onClick={()=>onConfirm(`${pad(getH())}:${pad(getM())}`)}>CONFIRM</button>
+          </div>
+        </div>
+        <div style={s.cols}>
+          <div style={s.selLine}/>
+          <div className="pcol" ref={hRef} style={s.col} onScroll={onHScroll}>
+            {Array.from({length:24},(_,i)=>(
+              <div key={i} style={s.item(pad(i)===display.split(":")[0])}
+                onClick={()=>{hRef.current.scrollTop=i*44;}}>{pad(i)}</div>
+            ))}
+          </div>
+          <div style={s.sep}>:</div>
+          <div className="pcol" ref={mRef} style={s.col} onScroll={onMScroll}>
+            {Array.from({length:60},(_,i)=>(
+              <div key={i} style={s.item(pad(i)===display.split(":")[1])}
+                onClick={()=>{mRef.current.scrollTop=i*44;}}>{pad(i)}</div>
+            ))}
+          </div>
+        </div>
+        <div style={s.display}>{display}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ──
+function App(){
+  const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",notes:""})));
+  const [locs,setLocs] = useState(DEFAULT_LOCS);
+  const [tab,setTab] = useState("board");
+  const [newLoc,setNewLoc] = useState("");
+  const [bhr,setBhr] = useState(bhrNow());
+  const [zulu,setZulu] = useState(zuluNow());
+  const [connected,setConnected] = useState(false);
+  const [picker,setPicker] = useState(null); // {idx, time}
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  useEffect(()=>{
+    const clk = setInterval(()=>{setBhr(bhrNow());setZulu(zuluNow());},1000);
+    const boardRef = db.ref("board");
     boardRef.on("value",snap=>{
       const data=snap.val()||{};
       setRows(Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",notes:"",...(data[i]||{})})));
       setConnected(true);
     });
-    // Firebase locations
-    const locRef=db.ref("locations");
-    locRef.on("value",snap=>{const v=snap.val();if(Array.isArray(v)&&v.length>0)setLocations(v);});
+    const locRef = db.ref("locations");
+    locRef.on("value",snap=>{ const v=snap.val(); if(Array.isArray(v)&&v.length>0)setLocs(v); });
     return()=>{clearInterval(clk);boardRef.off();locRef.off();};
   },[]);
 
-  const writeField=(i,field,value)=>{const u={};u[field]=value;db.ref("board/"+i).update(u);};
-  const writeLocations=(locs)=>{db.ref("locations").set(locs);};
+  const writeField = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
+  const writeLocs = l => db.ref("locations").set(l);
 
-  const updateRow=(i,field,val)=>{
-    const next=[...rowsRef.current];
-    next[i]={...next[i],[field]:val};
-    if(field==="status"&&val==="IN")next[i].dueBack="";
-    setRows(next);
+  const updateRow = (i,field,val) => {
+    setRows(prev=>{ const n=[...prev]; n[i]={...n[i],[field]:val}; if(field==="status"&&val==="IN")n[i].dueBack=""; return n; });
     writeField(i,field,val);
-    if(field==="status"&&val==="IN")writeField(i,"dueBack","");
+    if(field==="status"&&val==="IN") writeField(i,"dueBack","");
   };
 
-  const addLocation=()=>{
+  const addLoc = () => {
     const v=newLoc.trim().toUpperCase();
-    if(!v||locations.includes(v))return;
-    const next=[...locations,v];
-    setLocations(next);writeLocations(next);setNewLoc("");
+    if(!v||locs.includes(v))return;
+    const next=[...locs,v]; setLocs(next); writeLocs(next); setNewLoc("");
   };
-  const removeLocation=(loc)=>{
-    const next=locations.filter(l=>l!==loc);
-    setLocations(next);writeLocations(next);
-    rows.forEach((r,i)=>{if(r.location===loc)writeField(i,"location","");});
+  const removeLoc = loc => {
+    const next=locs.filter(l=>l!==loc); setLocs(next); writeLocs(next);
+    rowsRef.current.forEach((r,i)=>{ if(r.location===loc)writeField(i,"location",""); });
   };
 
-  const locColorMap={};
-  locations.forEach((l,i)=>{const c=LOC_PALETTE[i%LOC_PALETTE.length];locColorMap[l]={color:c,bg:c+"22"};});
+  const locColorMap = {};
+  locs.forEach((l,i)=>{ const c=PAL[i%PAL.length]; locColorMap[l]={color:c,bg:c+"22"}; });
   locColorMap[""]={color:"#5a6a7a",bg:"transparent"};
 
-  const statusCounts={};const locCounts={};let filled=0,overdueCount=0;
+  const sCounts={},lCounts={};let filled=0,odCount=0;
   rows.forEach(r=>{
     if(r.name)filled++;
-    if(isOverdue(r))overdueCount++;
-    if(r.status)statusCounts[r.status]=(statusCounts[r.status]||0)+1;
-    if(r.location)locCounts[r.location]=(locCounts[r.location]||0)+1;
+    if(isOvd(r))odCount++;
+    if(r.status)sCounts[r.status]=(sCounts[r.status]||0)+1;
+    if(r.location)lCounts[r.location]=(lCounts[r.location]||0)+1;
   });
-  const overdueRows=rows.filter(r=>r.name&&isOverdue(r));
+  const odRows = rows.filter(r=>r.name&&isOvd(r));
 
-  const s={
-    wrap:{background:"#080a0d",minHeight:"100vh",color:"#d4dde8",fontFamily:"'Share Tech Mono',monospace",fontSize:"13px"},
+  const f = {
+    mono:"'Share Tech Mono',monospace",
+    sans:"'Barlow Condensed',sans-serif",
+  };
+
+  const s = {
+    wrap:{background:"#080a0d",minHeight:"100vh",color:"#d4dde8",fontFamily:f.mono,fontSize:"13px"},
     header:{background:"#0d1117",borderBottom:"2px solid #c9a84c",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"12px"},
-    title:{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",fontSize:"26px",letterSpacing:"5px",color:"#fff",textTransform:"uppercase"},
+    title:{fontFamily:f.sans,fontWeight:"900",fontSize:"26px",letterSpacing:"5px",color:"#fff",textTransform:"uppercase"},
     gold:{color:"#c9a84c"},
     sub:{fontSize:"9px",color:"#5a6a7a",letterSpacing:"3px",marginTop:"3px",textTransform:"uppercase"},
     clockWrap:{textAlign:"right"},
-    bhrClock:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:"36px",fontWeight:"900",letterSpacing:"3px",color:"#c9a84c",lineHeight:"1"},
-    bhrLabel:{fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",marginTop:"2px"},
+    bhrClock:{fontFamily:f.sans,fontSize:"38px",fontWeight:"900",color:"#c9a84c",letterSpacing:"3px",lineHeight:"1"},
+    bhrLbl:{fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",marginTop:"2px"},
     zuluClock:{fontSize:"11px",color:"#5a6a7a",letterSpacing:"2px",marginTop:"4px"},
-    slotCount:{color:"#c9a84c",fontSize:"11px",letterSpacing:"2px",marginTop:"4px"},
+    filled:{color:"#c9a84c",fontSize:"11px",letterSpacing:"2px",marginTop:"4px"},
     tabs:{display:"flex",borderBottom:"1px solid #1e2630",background:"#0a0c0f"},
-    tab:(a)=>({background:a?"#0f1318":"transparent",border:"none",borderBottom:a?"2px solid #c9a84c":"2px solid transparent",color:a?"#c9a84c":"#5a6a7a",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",letterSpacing:"2px",padding:"11px 20px",cursor:"pointer",textTransform:"uppercase",marginBottom:"-1px"}),
+    tab:a=>({background:a?"#0f1318":"transparent",border:"none",borderBottom:a?"2px solid #c9a84c":"2px solid transparent",color:a?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",letterSpacing:"2px",padding:"11px 20px",cursor:"pointer",textTransform:"uppercase",marginBottom:"-1px"}),
     body:{padding:"14px 20px"},
-    statsRow:{display:"flex",gap:"8px",marginBottom:"10px",flexWrap:"wrap"},
-    statCard:(c)=>({background:"#0f1318",border:`1px solid ${c}33`,padding:"7px 12px",display:"flex",alignItems:"center",gap:"7px"}),
-    statNum:(c)=>({fontSize:"20px",fontWeight:"bold",color:c}),
-    statLbl:{fontSize:"9px",color:"#5a6a7a",letterSpacing:"1px",textTransform:"uppercase"},
-    alert:{background:"rgba(231,76,60,0.1)",border:"1px solid #e74c3c",borderLeft:"4px solid #e74c3c",padding:"10px 16px",marginBottom:"12px"},
+    srow:{display:"flex",gap:"8px",marginBottom:"10px",flexWrap:"wrap"},
+    sc:c=>({background:"#0f1318",border:`1px solid ${c}33`,padding:"7px 12px",display:"flex",alignItems:"center",gap:"7px"}),
+    sn:c=>({fontSize:"20px",fontWeight:"bold",color:c,fontFamily:f.mono}),
+    sl:{fontSize:"9px",color:"#5a6a7a",letterSpacing:"1px",textTransform:"uppercase"},
+    alert:{background:"rgba(231,76,60,0.1)",border:"1px solid #e74c3c",borderLeft:"4px solid #e74c3c",padding:"10px 16px",marginBottom:"12px",animation:"alertpulse 1.5s infinite"},
     alertTitle:{color:"#e74c3c",fontSize:"10px",letterSpacing:"3px",marginBottom:"8px"},
     alertTag:{display:"inline-block",background:"rgba(231,76,60,0.2)",border:"1px solid rgba(231,76,60,0.5)",color:"#ff8a80",padding:"3px 8px",fontSize:"11px",marginRight:"6px",marginBottom:"4px"},
-    tableWrap:{background:"#0f1318",border:"1px solid #1e2630",overflowX:"auto"},
+    tw:{background:"#0f1318",border:"1px solid #1e2630",overflowX:"auto"},
     th:{background:"#0d1117",borderBottom:"1px solid #7a6330",color:"#c9a84c",fontSize:"9px",letterSpacing:"3px",padding:"10px 12px",textAlign:"left",fontWeight:"normal",whiteSpace:"nowrap",textTransform:"uppercase"},
     td:{padding:"8px 12px",verticalAlign:"middle"},
-    inp:{background:"transparent",border:"none",borderBottom:"1px solid #1e2630",color:"#fff",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"110px",textTransform:"uppercase"},
-    sel:(val,map)=>({appearance:"none",WebkitAppearance:"none",background:map[val]?.bg||"#0a0c0f",border:`1px solid ${map[val]?.color||"#1e2630"}55`,color:map[val]?.color||"#5a6a7a",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}),
-    timeBtn:(dis)=>({background:dis?"transparent":"#080a0d",border:"1px solid "+(dis?"#1e2630":"#c9a84c44"),color:dis?"#2a3440":"#c9a84c",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",padding:"4px 8px",cursor:dis?"not-allowed":"pointer",letterSpacing:"2px",minWidth:"70px",textAlign:"center"}),
-    pickerOverlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"},
-    pickerBox:{background:"#0f1318",border:"1px solid #c9a84c",width:"100%",maxWidth:"400px",padding:"0 0 20px"},
-    pickerHeader:{background:"#0d1117",borderBottom:"1px solid #7a6330",padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"},
-    pickerTitle:{color:"#c9a84c",fontSize:"11px",letterSpacing:"3px"},
-    pickerDone:{background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",letterSpacing:"2px",padding:"6px 16px",cursor:"pointer"},
-    pickerCols:{display:"flex",justifyContent:"center",alignItems:"center",gap:"0",padding:"16px 0"},
-    pickerCol:{display:"flex",flexDirection:"column",alignItems:"center",width:"80px",height:"180px",overflowY:"scroll",scrollSnapType:"y mandatory",scrollbarWidth:"none"},
-    pickerItem:(sel)=>({scrollSnapAlign:"center",padding:"10px 0",fontSize:"22px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"700",letterSpacing:"2px",color:sel?"#c9a84c":"#5a6a7a",minHeight:"44px",display:"flex",alignItems:"center",justifyContent:"center",width:"100%",cursor:"pointer",transition:"color 0.15s"}),
-    pickerSep:{fontSize:"24px",color:"#c9a84c",fontWeight:"900",padding:"0 4px",marginTop:"-4px"},
-    notesInp:{background:"transparent",border:"none",borderBottom:"1px solid transparent",color:"#5a6a7a",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"100px"},
-    overdueBadge:{background:"#e74c3c",color:"#fff",fontSize:"8px",padding:"1px 5px",marginLeft:"4px",letterSpacing:"1px",verticalAlign:"middle"},
-    overdueTime:{color:"#e74c3c",fontSize:"10px",marginLeft:"4px"},
-    addRow:{display:"flex",gap:"8px",marginBottom:"6px"},
-    addInp:{flex:"1",background:"#0f1318",border:"1px solid #1e2630",color:"#fff",fontFamily:"'Share Tech Mono',monospace",fontSize:"13px",padding:"9px 12px",outline:"none",letterSpacing:"1px",textTransform:"uppercase"},
-    addBtn:{background:"rgba(201,168,76,0.1)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",letterSpacing:"2px",padding:"9px 16px",cursor:"pointer"},
-    locGrid:{display:"flex",flexWrap:"wrap",gap:"8px",marginTop:"16px"},
-    locChip:(c)=>({background:c+"14",border:`1px solid ${c}44`,color:c,fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",letterSpacing:"1px",padding:"7px 12px",display:"flex",alignItems:"center",gap:"8px"}),
-    removeBtn:{background:"transparent",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:"14px",padding:"0",lineHeight:"1"},
+    inp:{background:"transparent",border:"none",borderBottom:"1px solid #1e2630",color:"#fff",fontFamily:f.mono,fontSize:"12px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"110px",textTransform:"uppercase"},
+    sel:(val,map)=>({appearance:"none",WebkitAppearance:"none",background:map[val]?.bg||"#0a0c0f",border:`1px solid ${map[val]?.color||"#1e2630"}55`,color:map[val]?.color||"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}),
+    tBtn:dis=>({background:dis?"transparent":"#080a0d",border:`1px solid ${dis?"#1e2630":"#c9a84c55"}`,color:dis?"#2a3440":"#c9a84c",fontFamily:f.mono,fontSize:"12px",padding:"5px 8px",cursor:dis?"not-allowed":"pointer",letterSpacing:"2px",minWidth:"70px",textAlign:"center"}),
+    notesInp:{background:"transparent",border:"none",borderBottom:"1px solid transparent",color:"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"100px"},
+    badge:{background:"#e74c3c",color:"#fff",fontSize:"8px",padding:"1px 5px",marginLeft:"4px",letterSpacing:"1px",verticalAlign:"middle"},
+    odTime:{color:"#e74c3c",fontSize:"10px",marginLeft:"4px"},
     footer:{marginTop:"16px",paddingTop:"10px",borderTop:"1px solid #1e2630",fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:"4px"},
-    connecting:{textAlign:"center",padding:"60px 20px",color:"#5a6a7a",fontSize:"12px",letterSpacing:"3px"},
+    addRow:{display:"flex",gap:"8px",marginBottom:"6px"},
+    addInp:{flex:"1",background:"#0f1318",border:"1px solid #1e2630",color:"#fff",fontFamily:f.mono,fontSize:"13px",padding:"9px 12px",outline:"none",textTransform:"uppercase"},
+    addBtn:{background:"rgba(201,168,76,0.1)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:f.mono,fontSize:"12px",letterSpacing:"2px",padding:"9px 16px",cursor:"pointer"},
+    locGrid:{display:"flex",flexWrap:"wrap",gap:"8px",marginTop:"16px"},
+    locChip:c=>({background:c+"14",border:`1px solid ${c}44`,color:c,fontFamily:f.mono,fontSize:"12px",letterSpacing:"1px",padding:"7px 12px",display:"flex",alignItems:"center",gap:"8px"}),
+    rmBtn:{background:"transparent",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:"14px",padding:"0",lineHeight:"1"},
+    connecting:{textAlign:"center",padding:"60px 20px",color:"#5a6a7a",fontSize:"12px",letterSpacing:"3px",fontFamily:f.mono},
   };
 
-  const STAT_DEFS=[
+  const SDEFS=[
     {key:"IN",label:"In Loc",color:"#2ecc71"},
     {key:"OUT",label:"Out",color:"#e74c3c"},
     {key:"R&R",label:"R&R",color:"#3498db"},
@@ -174,62 +236,21 @@ function App(){
     {key:"OVERDUE",label:"Overdue",color:"#e74c3c"},
   ];
 
-  const hours=Array.from({length:24},(_,i)=>String(i).padStart(2,"0"));
-  const mins=Array.from({length:60},(_,i)=>String(i).padStart(2,"0"));
-
-  function TimePicker(){
-    if(!picker)return null;
-    const [h,m]=(picker.time||"00:00").split(":");
-    const [selH,setSelH]=useState(h||"00");
-    const [selM,setSelM]=useState(m||"00");
-    const hRef=useRef(null);
-    const mRef=useRef(null);
-    useEffect(()=>{
-      if(hRef.current){const idx=parseInt(selH);hRef.current.scrollTop=idx*44;}
-      if(mRef.current){const idx=parseInt(selM);mRef.current.scrollTop=idx*44;}
-    },[]);
-    const confirmTime=()=>{
-      const t=selH+":"+selM;
-      updateRow(picker.rowIdx,"dueBack",t);
-      setPicker(null);
-    };
-    return <div style={s.pickerOverlay} onClick={e=>{if(e.target===e.currentTarget)setPicker(null);}}>
-      <div style={s.pickerBox}>
-        <div style={s.pickerHeader}>
-          <span style={s.pickerTitle}>SET DUE BACK TIME (BHR)</span>
-          <button style={s.pickerDone} onClick={confirmTime}>CONFIRM</button>
-        </div>
-        <div style={s.pickerCols}>
-          <div ref={hRef} style={s.pickerCol} onScroll={e=>{const idx=Math.round(e.target.scrollTop/44);setSelH(String(idx).padStart(2,"0"));}}>
-            {hours.map(hh=><div key={hh} style={s.pickerItem(hh===selH)} onClick={()=>{setSelH(hh);hRef.current.scrollTop=parseInt(hh)*44;}}>{hh}</div>)}
-          </div>
-          <div style={s.pickerSep}>:</div>
-          <div ref={mRef} style={s.pickerCol} onScroll={e=>{const idx=Math.round(e.target.scrollTop/44);setSelM(String(idx).padStart(2,"0"));}}>
-            {mins.map(mm=><div key={mm} style={s.pickerItem(mm===selM)} onClick={()=>{setSelM(mm);mRef.current.scrollTop=parseInt(mm)*44;}}>{mm}</div>)}
-          </div>
-        </div>
-        <div style={{textAlign:"center",fontSize:"32px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",color:"#c9a84c",letterSpacing:"4px"}}>{selH}:{selM}</div>
-      </div>
-    </div>;
-  }
-
   if(!connected) return (
     <div style={s.wrap}>
       <div style={s.header}>
         <div><div style={s.title}>MOVING <span style={s.gold}>&</span> TRACKING</div><div style={s.sub}>BDL Status Board // Live Personnel Tracking</div></div>
-        <div style={s.clockWrap}><div style={s.bhrClock}>{bhr}</div><div style={s.bhrLabel}>BAHRAIN LOCAL</div><div style={s.zuluClock}>ZULU: {zulu}</div></div>
+        <div style={s.clockWrap}><div style={s.bhrClock}>{bhr}</div><div style={s.bhrLbl}>BAHRAIN LOCAL</div><div style={s.zuluClock}>ZULU: {zulu}</div></div>
       </div>
       <div style={s.connecting}>
-        <div style={{width:"30px",height:"30px",border:"2px solid #1e2630",borderTopColor:"#c9a84c",borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 16px"}}></div>
+        <div style={{width:"30px",height:"30px",border:"2px solid #1e2630",borderTopColor:"#c9a84c",borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 16px"}}/>
         CONNECTING TO DATABASE...
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     </div>
   );
 
   return (
     <div style={s.wrap}>
-      {/* Header */}
       <div style={s.header}>
         <div>
           <div style={s.title}>MOVING <span style={s.gold}>&</span> TRACKING</div>
@@ -237,82 +258,75 @@ function App(){
         </div>
         <div style={s.clockWrap}>
           <div style={s.bhrClock}>{bhr}</div>
-          <div style={s.bhrLabel}>BAHRAIN LOCAL</div>
+          <div style={s.bhrLbl}>BAHRAIN LOCAL</div>
           <div style={s.zuluClock}>ZULU: {zulu}</div>
-          <div style={s.slotCount}>
-            {filled}/100 FILLED
-            {overdueCount>0&&<span style={{color:"#e74c3c",marginLeft:"10px"}}>⚠ {overdueCount} OVERDUE</span>}
-          </div>
+          <div style={s.filled}>{filled}/100 FILLED{odCount>0&&<span style={{color:"#e74c3c",marginLeft:"8px"}}>⚠ {odCount} OVERDUE</span>}</div>
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={s.tabs}>
         <button style={s.tab(tab==="board")} onClick={()=>setTab("board")}>Board</button>
-        <button style={s.tab(tab==="locations")} onClick={()=>setTab("locations")}>Locations ({locations.length})</button>
+        <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>Locations ({locs.length})</button>
       </div>
 
       <div style={s.body}>
         {tab==="board"&&<>
           {/* Status stats */}
-          <div style={s.statsRow}>
-            {STAT_DEFS.map(({key,label,color})=>{
-              const count=key==="TOTAL"?filled:key==="OVERDUE"?overdueCount:(statusCounts[key]||0);
-              return <div key={key} style={s.statCard(color)}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:count>0?color:"#2a3440",flexShrink:0,boxShadow:key==="OVERDUE"&&count>0?`0 0 6px ${color}`:undefined}}/>
-                <div><div style={s.statNum(count>0?color:"#fff")}>{count}</div><div style={s.statLbl}>{label}</div></div>
+          <div style={s.srow}>
+            {SDEFS.map(({key,label,color})=>{
+              const n=key==="TOTAL"?filled:key==="OVERDUE"?odCount:(sCounts[key]||0);
+              return <div key={key} style={s.sc(color)}>
+                <div style={{width:7,height:7,borderRadius:"50%",background:n>0?color:"#2a3440",flexShrink:0,boxShadow:key==="OVERDUE"&&n>0?`0 0 6px ${color}`:undefined}}/>
+                <div><div style={s.sn(n>0?color:"#fff")}>{n}</div><div style={s.sl}>{label}</div></div>
               </div>;
             })}
           </div>
 
           {/* Location stats */}
-          <div style={{...s.statsRow,marginBottom:"14px"}}>
-            {locations.map((l,i)=>{
-              const c=LOC_PALETTE[i%LOC_PALETTE.length],count=locCounts[l]||0;
-              return <div key={l} style={s.statCard(c)}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:count>0?c:"#2a3440",flexShrink:0}}/>
-                <div><div style={s.statNum(count>0?c:"#fff")}>{count}</div><div style={s.statLbl}>{l}</div></div>
+          <div style={{...s.srow,marginBottom:"14px"}}>
+            {locs.map((l,i)=>{
+              const c=PAL[i%PAL.length],n=lCounts[l]||0;
+              return <div key={l} style={s.sc(c)}>
+                <div style={{width:7,height:7,borderRadius:"50%",background:n>0?c:"#2a3440",flexShrink:0}}/>
+                <div><div style={s.sn(n>0?c:"#fff")}>{n}</div><div style={s.sl}>{l}</div></div>
               </div>;
             })}
           </div>
 
-          {/* Overdue alert */}
-          {overdueRows.length>0&&<div style={s.alert}>
+          {/* Alert */}
+          {odRows.length>0&&<div style={s.alert}>
             <div style={s.alertTitle}>⚠ OVERDUE PERSONNEL DETECTED</div>
-            <div>{overdueRows.map((r,i)=><span key={i} style={s.alertTag}>{r.name} — {overdueStr(r)}</span>)}</div>
+            <div>{odRows.map((r,i)=><span key={i} style={s.alertTag}>{r.name} — {ovdStr(r)}</span>)}</div>
           </div>}
 
           {/* Table */}
-          <div style={s.tableWrap}>
+          <div style={s.tw}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead><tr>{["#","Name","Location","Status","Due Back (BHR)","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.map((r,i)=>{
-                  const od=isOverdue(r);
-                  return <tr key={i} style={{background:od?"rgba(231,76,60,0.07)":"transparent",borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
-                    <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{r.id}</td>
+                  const od=isOvd(r);
+                  const dis=r.status==="IN"||r.status==="";
+                  return <tr key={i} style={{background:od?"rgba(231,76,60,0.07)":"transparent",borderBottom:"1px solid rgba(30,38,48,0.7)",animation:od?"rp 2s infinite":undefined}}>
+                    <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
                     <td style={{...s.td,minWidth:"130px"}}>
                       <input style={s.inp} value={r.name} placeholder="—" onChange={e=>updateRow(i,"name",e.target.value.toUpperCase())} maxLength={25}/>
-                      {od&&<><span style={s.overdueBadge}>OVRD</span><span style={s.overdueTime}>{overdueStr(r)}</span></>}
+                      {od&&<><span style={s.badge}>OVRD</span><span style={s.odTime}>{ovdStr(r)}</span></>}
                     </td>
                     <td style={{...s.td,minWidth:"110px"}}>
                       <select style={s.sel(r.location,locColorMap)} value={r.location} onChange={e=>updateRow(i,"location",e.target.value)}>
                         <option value="">—</option>
-                        {locations.map(l=><option key={l} value={l}>{l}</option>)}
+                        {locs.map(l=><option key={l} value={l}>{l}</option>)}
                       </select>
                     </td>
                     <td style={{...s.td,minWidth:"100px"}}>
-                      <select style={s.sel(r.status,STATUS_COLOR)} value={r.status} onChange={e=>updateRow(i,"status",e.target.value)}>
+                      <select style={s.sel(r.status,SCOL)} value={r.status} onChange={e=>updateRow(i,"status",e.target.value)}>
                         <option value="">—</option>
                         {STATUSES.map(st=><option key={st} value={st}>{st}</option>)}
                       </select>
                     </td>
                     <td style={s.td}>
-                      <button
-                        style={s.timeBtn(r.status==="IN"||r.status==="")}
-                        disabled={r.status==="IN"||r.status===""}
-                        onClick={()=>!(r.status==="IN"||r.status==="")&&setPicker({rowIdx:i,time:r.dueBack||"00:00"})}
-                      >
+                      <button style={s.tBtn(dis)} disabled={dis} onClick={()=>!dis&&setPicker({idx:i,time:r.dueBack||"00:00"})}>
                         {r.dueBack||"— : —"}
                       </button>
                     </td>
@@ -324,28 +338,22 @@ function App(){
               </tbody>
             </table>
           </div>
-          <div style={s.footer}>
-            <span style={{color:"var(--green)"}}>⬤ LIVE</span>
-            <span>ALL TIMES BAHRAIN // 100 SLOTS</span>
-          </div>
+          <div style={s.footer}><span style={{color:"#2ecc71"}}>⬤ LIVE</span><span>BAHRAIN TIME // 100 SLOTS</span></div>
         </>}
 
-        {picker&&<TimePicker/>}
-
-        {tab==="locations"&&<>
-          <div style={{marginBottom:"16px",fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"}}>ADD OR REMOVE LOCATIONS — CHANGES APPLY INSTANTLY TO EVERYONE</div>
+        {tab==="locs"&&<>
+          <div style={{marginBottom:"16px",fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"}}>ADD OR REMOVE LOCATIONS — CHANGES SYNC INSTANTLY FOR EVERYONE</div>
           <div style={s.addRow}>
-            <input style={s.addInp} value={newLoc} placeholder="TYPE NEW LOCATION..." onChange={e=>setNewLoc(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addLocation()} maxLength={20}/>
-            <button style={s.addBtn} onClick={addLocation}>+ ADD</button>
+            <input style={s.addInp} value={newLoc} placeholder="TYPE NEW LOCATION..." onChange={e=>setNewLoc(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addLoc()} maxLength={20}/>
+            <button style={s.addBtn} onClick={addLoc}>+ ADD</button>
           </div>
           <div style={{fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px"}}>Press ADD or hit Enter.</div>
-          <div style={{margin:"18px 0 10px",fontSize:"10px",color:"#c9a84c",letterSpacing:"3px"}}>CURRENT LOCATIONS ({locations.length})</div>
+          <div style={{margin:"18px 0 10px",fontSize:"10px",color:"#c9a84c",letterSpacing:"3px"}}>CURRENT LOCATIONS ({locs.length})</div>
           <div style={s.locGrid}>
-            {locations.map((l,i)=>{const c=LOC_PALETTE[i%LOC_PALETTE.length];return(
+            {locs.map((l,i)=>{const c=PAL[i%PAL.length];return(
               <div key={l} style={s.locChip(c)}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>
-                {l}
-                <button style={s.removeBtn} onClick={()=>removeLocation(l)}>✕</button>
+                <div style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>{l}
+                <button style={s.rmBtn} onClick={()=>removeLoc(l)}>✕</button>
               </div>
             );})}
           </div>
@@ -354,6 +362,13 @@ function App(){
           </div>
         </>}
       </div>
+
+      {picker&&<TimePicker
+        time={picker.time}
+        onConfirm={t=>{updateRow(picker.idx,"dueBack",t);setPicker(null);}}
+        onClear={()=>{updateRow(picker.idx,"dueBack","");setPicker(null);}}
+        onClose={()=>setPicker(null)}
+      />}
     </div>
   );
 }
