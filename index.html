@@ -4,265 +4,265 @@ const DEFAULT_LOCATIONS = ["WHITEHOUSE", "SOF H", "BEB", "BDL", "OUT"];
 const STATUSES = ["IN", "OUT", "R&R", "MEDICAL", "TASKING"];
 
 const STATUS_COLOR = {
-IN: { color: "#2ecc71", bg: "rgba(46,204,113,0.15)" },
-OUT: { color: "#e74c3c", bg: "rgba(231,76,60,0.15)" },
-"R&R": { color: "#3498db", bg: "rgba(52,152,219,0.15)" },
-MEDICAL: { color: "#f39c12", bg: "rgba(243,156,18,0.15)" },
-TASKING: { color: "#9b59b6", bg: "rgba(155,89,182,0.15)" },
-"": { color: "#5a6a7a", bg: "transparent" },
+  IN:      { color: "#2ecc71", bg: "rgba(46,204,113,0.15)" },
+  OUT:     { color: "#e74c3c", bg: "rgba(231,76,60,0.15)" },
+  "R&R":   { color: "#3498db", bg: "rgba(52,152,219,0.15)" },
+  MEDICAL: { color: "#f39c12", bg: "rgba(243,156,18,0.15)" },
+  TASKING: { color: "#9b59b6", bg: "rgba(155,89,182,0.15)" },
+  "":      { color: "#5a6a7a", bg: "transparent" },
 };
 
 const LOC_PALETTE = ["#c9a84c","#3498db","#2ecc71","#9b59b6","#e74c3c","#e67e22","#1abc9c","#e91e63","#00bcd4","#8bc34a"];
 
 const defaultRows = () =>
-Array.from({ length: 100 }, (_, i) => ({ id: i + 1, name: "", location: "", status: "", dueBack: "", notes: "" }));
+  Array.from({ length: 100 }, (_, i) => ({ id: i + 1, name: "", location: "", status: "", dueBack: "", notes: "" }));
 
 function bhrNow() {
-const n = new Date();
-const z = v => String(v).padStart(2, "0");
-const bhrH = (n.getUTCHours() + 3) % 24;
-return `${z(bhrH)}:${z(n.getUTCMinutes())}:${z(n.getUTCSeconds())}`;
+  const n = new Date();
+  const z = v => String(v).padStart(2, "0");
+  const bhrH = (n.getUTCHours() + 3) % 24;
+  return `${z(bhrH)}:${z(n.getUTCMinutes())}:${z(n.getUTCSeconds())}`;
 }
 function zuluNow() {
-const n = new Date();
-const z = v => String(v).padStart(2, "0");
-return `${z(n.getUTCHours())}:${z(n.getUTCMinutes())}:${z(n.getUTCSeconds())}`;
+  const n = new Date();
+  const z = v => String(v).padStart(2, "0");
+  return `${z(n.getUTCHours())}:${z(n.getUTCMinutes())}:${z(n.getUTCSeconds())}`;
 }
 function nowMins() {
-const n = new Date();
-return ((n.getUTCHours() + 3) % 24) * 60 + n.getUTCMinutes();
+  const n = new Date();
+  return ((n.getUTCHours() + 3) % 24) * 60 + n.getUTCMinutes();
 }
 function timeMins(t) {
-if (!t) return null;
-const [h, m] = t.split(":").map(Number);
-return h * 60 + m;
+  if (!t) return null;
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
 }
 function isOverdue(row) {
-if (!row.dueBack || row.status === "IN" || row.status === "") return false;
-return nowMins() > timeMins(row.dueBack);
+  if (!row.dueBack || row.status === "IN" || row.status === "") return false;
+  return nowMins() > timeMins(row.dueBack);
 }
 function overdueStr(row) {
-const diff = nowMins() - timeMins(row.dueBack);
-const h = Math.floor(diff / 60), m = diff % 60;
-return h > 0 ? `+${h}H ${m}M` : `+${m}M`;
+  const diff = nowMins() - timeMins(row.dueBack);
+  const h = Math.floor(diff / 60), m = diff % 60;
+  return h > 0 ? `+${h}H ${m}M` : `+${m}M`;
 }
 
 export default function App() {
-const [rows, setRows] = useState(defaultRows);
-const [locations, setLocations] = useState(DEFAULT_LOCATIONS);
-const [activeTab, setActiveTab] = useState("board");
-const [newLoc, setNewLoc] = useState("");
-const [loaded, setLoaded] = useState(false);
-const [bhr, setBhr] = useState(bhrNow());
-const [zulu, setZulu] = useState(zuluNow());
+  const [rows, setRows] = useState(defaultRows);
+  const [locations, setLocations] = useState(DEFAULT_LOCATIONS);
+  const [activeTab, setActiveTab] = useState("board");
+  const [newLoc, setNewLoc] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [bhr, setBhr] = useState(bhrNow());
+  const [zulu, setZulu] = useState(zuluNow());
 
-useEffect(() => {
-(async () => {
-try { const r = await window.storage.get("bdl_rows"); if (r?.value) { const s = JSON.parse(r.value); if (Array.isArray(s) && s.length === 100) setRows(s); } } catch {}
-try { const l = await window.storage.get("bdl_locations"); if (l?.value) { const s = JSON.parse(l.value); if (Array.isArray(s) && s.length > 0) setLocations(s); } } catch {}
-setLoaded(true);
-})();
-}, []);
+  useEffect(() => {
+    (async () => {
+      try { const r = await window.storage.get("bdl_rows"); if (r?.value) { const s = JSON.parse(r.value); if (Array.isArray(s) && s.length === 100) setRows(s); } } catch {}
+      try { const l = await window.storage.get("bdl_locations"); if (l?.value) { const s = JSON.parse(l.value); if (Array.isArray(s) && s.length > 0) setLocations(s); } } catch {}
+      setLoaded(true);
+    })();
+  }, []);
 
-useEffect(() => { if (!loaded) return; window.storage.set("bdl_rows", JSON.stringify(rows)).catch(() => {}); }, [rows, loaded]);
-useEffect(() => { if (!loaded) return; window.storage.set("bdl_locations", JSON.stringify(locations)).catch(() => {}); }, [locations, loaded]);
+  useEffect(() => { if (!loaded) return; window.storage.set("bdl_rows", JSON.stringify(rows)).catch(() => {}); }, [rows, loaded]);
+  useEffect(() => { if (!loaded) return; window.storage.set("bdl_locations", JSON.stringify(locations)).catch(() => {}); }, [locations, loaded]);
 
-useEffect(() => {
-const id = setInterval(() => { setBhr(bhrNow()); setZulu(zuluNow()); }, 1000);
-return () => clearInterval(id);
-}, []);
+  useEffect(() => {
+    const id = setInterval(() => { setBhr(bhrNow()); setZulu(zuluNow()); }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
-const update = (i, field, val) => {
-setRows(prev => { const next = [...prev]; next[i] = { ...next[i], [field]: val }; if (field === "status" && val === "IN") next[i].dueBack = ""; return next; });
-};
-const addLocation = () => {
-const v = newLoc.trim().toUpperCase();
-if (!v || locations.includes(v)) return;
-setLocations(prev => [...prev, v]); setNewLoc("");
-};
-const removeLocation = (loc) => {
-setLocations(prev => prev.filter(l => l !== loc));
-setRows(prev => prev.map(r => r.location === loc ? { ...r, location: "" } : r));
-};
+  const update = (i, field, val) => {
+    setRows(prev => { const next = [...prev]; next[i] = { ...next[i], [field]: val }; if (field === "status" && val === "IN") next[i].dueBack = ""; return next; });
+  };
+  const addLocation = () => {
+    const v = newLoc.trim().toUpperCase();
+    if (!v || locations.includes(v)) return;
+    setLocations(prev => [...prev, v]); setNewLoc("");
+  };
+  const removeLocation = (loc) => {
+    setLocations(prev => prev.filter(l => l !== loc));
+    setRows(prev => prev.map(r => r.location === loc ? { ...r, location: "" } : r));
+  };
 
-const locColorMap = {};
-locations.forEach((l, i) => { const c = LOC_PALETTE[i % LOC_PALETTE.length]; locColorMap[l] = { color: c, bg: c + "22" }; });
-locColorMap[""] = { color: "#5a6a7a", bg: "transparent" };
+  const locColorMap = {};
+  locations.forEach((l, i) => { const c = LOC_PALETTE[i % LOC_PALETTE.length]; locColorMap[l] = { color: c, bg: c + "22" }; });
+  locColorMap[""] = { color: "#5a6a7a", bg: "transparent" };
 
-const statusCounts = {};
-let filledCount = 0, overdueCount = 0;
-rows.forEach(r => {
-if (r.name) filledCount++;
-if (isOverdue(r)) overdueCount++;
-if (r.status) statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
-});
-const overdueRows = rows.filter(r => r.name && isOverdue(r));
+  const statusCounts = {};
+  let filledCount = 0, overdueCount = 0;
+  rows.forEach(r => {
+    if (r.name) filledCount++;
+    if (isOverdue(r)) overdueCount++;
+    if (r.status) statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
+  });
+  const overdueRows = rows.filter(r => r.name && isOverdue(r));
 
-const s = {
-wrap: { background: "#080a0d", minHeight: "100vh", color: "#d4dde8", fontFamily: "'Courier New', monospace", fontSize: "13px" },
-header: { background: "#0d1117", borderBottom: "2px solid #c9a84c", padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" },
-title: { fontSize: "20px", fontWeight: "900", letterSpacing: "5px", color: "#fff", textTransform: "uppercase" },
-gold: { color: "#c9a84c" },
-sub: { fontSize: "9px", color: "#5a6a7a", letterSpacing: "3px", marginTop: "3px" },
-clockWrap: { textAlign: "right" },
-bhrClock: { fontSize: "32px", fontWeight: "900", letterSpacing: "3px", color: "#c9a84c", fontFamily: "'Courier New', monospace", lineHeight: 1 },
-bhrLabel: { fontSize: "9px", color: "#c9a84c", letterSpacing: "3px", marginTop: "1px" },
-zuluClock: { fontSize: "11px", color: "#5a6a7a", letterSpacing: "2px", marginTop: "4px" },
-slotCount: { color: "#c9a84c", fontSize: "11px", letterSpacing: "2px", marginTop: "4px" },
-tabs: { display: "flex", borderBottom: "1px solid #1e2630" },
-tab: (a) => ({ background: a ? "#0f1318" : "transparent", border: "none", borderBottom: a ? "2px solid #c9a84c" : "2px solid transparent", color: a ? "#c9a84c" : "#5a6a7a", fontFamily: "monospace", fontSize: "11px", letterSpacing: "2px", padding: "10px 18px", cursor: "pointer", textTransform: "uppercase", marginBottom: "-1px" }),
-body: { padding: "14px 16px" },
-statsRow: { display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" },
-statCard: (c) => ({ background: "#0f1318", border: `1px solid ${c}33`, padding: "7px 12px", display: "flex", alignItems: "center", gap: "7px" }),
-statNum: (c) => ({ fontSize: "20px", fontWeight: "bold", color: c }),
-statLbl: { fontSize: "9px", color: "#5a6a7a", letterSpacing: "1px", textTransform: "uppercase" },
-alert: { background: "rgba(231,76,60,0.1)", border: "1px solid #e74c3c", borderLeft: "4px solid #e74c3c", padding: "10px 14px", marginBottom: "12px" },
-alertTitle: { color: "#e74c3c", fontSize: "10px", letterSpacing: "3px", marginBottom: "6px" },
-alertTag: { display: "inline-block", background: "rgba(231,76,60,0.2)", border: "1px solid rgba(231,76,60,0.5)", color: "#ff8a80", padding: "2px 8px", fontSize: "11px", marginRight: "6px", marginBottom: "4px" },
-tableWrap: { background: "#0f1318", border: "1px solid #1e2630", overflowX: "auto" },
-th: { background: "#0d1117", borderBottom: "1px solid #7a6330", color: "#c9a84c", fontSize: "9px", letterSpacing: "2px", padding: "9px 10px", textAlign: "left", fontWeight: "normal", whiteSpace: "nowrap", textTransform: "uppercase" },
-td: { padding: "7px 10px", borderBottom: "1px solid rgba(30,38,48,0.6)", verticalAlign: "middle" },
-inp: { background: "transparent", border: "none", borderBottom: "1px solid #1e2630", color: "#fff", fontFamily: "monospace", fontSize: "12px", padding: "3px 4px", outline: "none", width: "100%", minWidth: "90px" },
-sel: (val, map) => ({ appearance: "none", WebkitAppearance: "none", background: map[val]?.bg || "#0a0c0f", border: `1px solid ${map[val]?.color || "#1e2630"}55`, color: map[val]?.color || "#5a6a7a", fontFamily: "monospace", fontSize: "11px", padding: "4px 6px", cursor: "pointer", outline: "none", width: "100%", borderRadius: "0" }),
-timeInp: (dis) => ({ background: "transparent", border: "1px solid #1e2630", color: dis ? "#2a3440" : "#d4dde8", fontFamily: "monospace", fontSize: "11px", padding: "4px 6px", outline: "none", width: "80px", cursor: dis ? "not-allowed" : "auto" }),
-notesInp: { background: "transparent", border: "none", borderBottom: "1px solid transparent", color: "#5a6a7a", fontFamily: "monospace", fontSize: "11px", padding: "3px 4px", outline: "none", width: "100%", minWidth: "100px" },
-overdueBadge: { background: "#e74c3c", color: "#fff", fontSize: "8px", padding: "1px 5px", marginLeft: "4px", letterSpacing: "1px", verticalAlign: "middle" },
-overdueTime: { color: "#e74c3c", fontSize: "10px", marginLeft: "4px" },
-addRow: { display: "flex", gap: "8px", marginBottom: "6px" },
-addInp: { flex: 1, background: "#0f1318", border: "1px solid #1e2630", color: "#fff", fontFamily: "monospace", fontSize: "13px", padding: "9px 12px", outline: "none", letterSpacing: "1px", textTransform: "uppercase" },
-addBtn: { background: "rgba(201,168,76,0.1)", border: "1px solid #c9a84c", color: "#c9a84c", fontFamily: "monospace", fontSize: "12px", letterSpacing: "2px", padding: "9px 16px", cursor: "pointer" },
-locGrid: { display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "18px" },
-locChip: (c) => ({ background: c + "18", border: `1px solid ${c}55`, color: c, fontFamily: "monospace", fontSize: "12px", letterSpacing: "1px", padding: "7px 12px", display: "flex", alignItems: "center", gap: "8px" }),
-removeBtn: { background: "transparent", border: "none", color: "#e74c3c", cursor: "pointer", fontSize: "14px", padding: "0", lineHeight: 1 },
-};
+  const s = {
+    wrap: { background: "#080a0d", minHeight: "100vh", color: "#d4dde8", fontFamily: "'Courier New', monospace", fontSize: "13px" },
+    header: { background: "#0d1117", borderBottom: "2px solid #c9a84c", padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" },
+    title: { fontSize: "20px", fontWeight: "900", letterSpacing: "5px", color: "#fff", textTransform: "uppercase" },
+    gold: { color: "#c9a84c" },
+    sub: { fontSize: "9px", color: "#5a6a7a", letterSpacing: "3px", marginTop: "3px" },
+    clockWrap: { textAlign: "right" },
+    bhrClock: { fontSize: "32px", fontWeight: "900", letterSpacing: "3px", color: "#c9a84c", fontFamily: "'Courier New', monospace", lineHeight: 1 },
+    bhrLabel: { fontSize: "9px", color: "#c9a84c", letterSpacing: "3px", marginTop: "1px" },
+    zuluClock: { fontSize: "11px", color: "#5a6a7a", letterSpacing: "2px", marginTop: "4px" },
+    slotCount: { color: "#c9a84c", fontSize: "11px", letterSpacing: "2px", marginTop: "4px" },
+    tabs: { display: "flex", borderBottom: "1px solid #1e2630" },
+    tab: (a) => ({ background: a ? "#0f1318" : "transparent", border: "none", borderBottom: a ? "2px solid #c9a84c" : "2px solid transparent", color: a ? "#c9a84c" : "#5a6a7a", fontFamily: "monospace", fontSize: "11px", letterSpacing: "2px", padding: "10px 18px", cursor: "pointer", textTransform: "uppercase", marginBottom: "-1px" }),
+    body: { padding: "14px 16px" },
+    statsRow: { display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" },
+    statCard: (c) => ({ background: "#0f1318", border: `1px solid ${c}33`, padding: "7px 12px", display: "flex", alignItems: "center", gap: "7px" }),
+    statNum: (c) => ({ fontSize: "20px", fontWeight: "bold", color: c }),
+    statLbl: { fontSize: "9px", color: "#5a6a7a", letterSpacing: "1px", textTransform: "uppercase" },
+    alert: { background: "rgba(231,76,60,0.1)", border: "1px solid #e74c3c", borderLeft: "4px solid #e74c3c", padding: "10px 14px", marginBottom: "12px" },
+    alertTitle: { color: "#e74c3c", fontSize: "10px", letterSpacing: "3px", marginBottom: "6px" },
+    alertTag: { display: "inline-block", background: "rgba(231,76,60,0.2)", border: "1px solid rgba(231,76,60,0.5)", color: "#ff8a80", padding: "2px 8px", fontSize: "11px", marginRight: "6px", marginBottom: "4px" },
+    tableWrap: { background: "#0f1318", border: "1px solid #1e2630", overflowX: "auto" },
+    th: { background: "#0d1117", borderBottom: "1px solid #7a6330", color: "#c9a84c", fontSize: "9px", letterSpacing: "2px", padding: "9px 10px", textAlign: "left", fontWeight: "normal", whiteSpace: "nowrap", textTransform: "uppercase" },
+    td: { padding: "7px 10px", borderBottom: "1px solid rgba(30,38,48,0.6)", verticalAlign: "middle" },
+    inp: { background: "transparent", border: "none", borderBottom: "1px solid #1e2630", color: "#fff", fontFamily: "monospace", fontSize: "12px", padding: "3px 4px", outline: "none", width: "100%", minWidth: "90px" },
+    sel: (val, map) => ({ appearance: "none", WebkitAppearance: "none", background: map[val]?.bg || "#0a0c0f", border: `1px solid ${map[val]?.color || "#1e2630"}55`, color: map[val]?.color || "#5a6a7a", fontFamily: "monospace", fontSize: "11px", padding: "4px 6px", cursor: "pointer", outline: "none", width: "100%", borderRadius: "0" }),
+    timeInp: (dis) => ({ background: "transparent", border: "1px solid #1e2630", color: dis ? "#2a3440" : "#d4dde8", fontFamily: "monospace", fontSize: "11px", padding: "4px 6px", outline: "none", width: "80px", cursor: dis ? "not-allowed" : "auto" }),
+    notesInp: { background: "transparent", border: "none", borderBottom: "1px solid transparent", color: "#5a6a7a", fontFamily: "monospace", fontSize: "11px", padding: "3px 4px", outline: "none", width: "100%", minWidth: "100px" },
+    overdueBadge: { background: "#e74c3c", color: "#fff", fontSize: "8px", padding: "1px 5px", marginLeft: "4px", letterSpacing: "1px", verticalAlign: "middle" },
+    overdueTime: { color: "#e74c3c", fontSize: "10px", marginLeft: "4px" },
+    addRow: { display: "flex", gap: "8px", marginBottom: "6px" },
+    addInp: { flex: 1, background: "#0f1318", border: "1px solid #1e2630", color: "#fff", fontFamily: "monospace", fontSize: "13px", padding: "9px 12px", outline: "none", letterSpacing: "1px", textTransform: "uppercase" },
+    addBtn: { background: "rgba(201,168,76,0.1)", border: "1px solid #c9a84c", color: "#c9a84c", fontFamily: "monospace", fontSize: "12px", letterSpacing: "2px", padding: "9px 16px", cursor: "pointer" },
+    locGrid: { display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "18px" },
+    locChip: (c) => ({ background: c + "18", border: `1px solid ${c}55`, color: c, fontFamily: "monospace", fontSize: "12px", letterSpacing: "1px", padding: "7px 12px", display: "flex", alignItems: "center", gap: "8px" }),
+    removeBtn: { background: "transparent", border: "none", color: "#e74c3c", cursor: "pointer", fontSize: "14px", padding: "0", lineHeight: 1 },
+  };
 
-const STAT_DEFS = [
-{ key: "IN", label: "In Loc", color: "#2ecc71" },
-{ key: "OUT", label: "Out", color: "#e74c3c" },
-{ key: "R&R", label: "R&R", color: "#3498db" },
-{ key: "MEDICAL", label: "Medical", color: "#f39c12" },
-{ key: "TASKING", label: "Tasking", color: "#9b59b6" },
-{ key: "TOTAL", label: "Total", color: "#c9a84c" },
-{ key: "OVERDUE", label: "Overdue", color: "#e74c3c" },
-];
+  const STAT_DEFS = [
+    { key: "IN", label: "In Loc", color: "#2ecc71" },
+    { key: "OUT", label: "Out", color: "#e74c3c" },
+    { key: "R&R", label: "R&R", color: "#3498db" },
+    { key: "MEDICAL", label: "Medical", color: "#f39c12" },
+    { key: "TASKING", label: "Tasking", color: "#9b59b6" },
+    { key: "TOTAL", label: "Total", color: "#c9a84c" },
+    { key: "OVERDUE", label: "Overdue", color: "#e74c3c" },
+  ];
 
-return (
-<div style={s.wrap}>
-<div style={s.header}>
-<div>
-<div style={s.title}>MOVING <span style={s.gold}>&</span> TRACKING</div>
-<div style={s.sub}>BDL STATUS BOARD // LIVE PERSONNEL TRACKING</div>
-</div>
-<div style={s.clockWrap}>
-<div style={s.bhrClock}>{bhr}</div>
-<div style={s.bhrLabel}>BAHRAIN LOCAL</div>
-<div style={s.zuluClock}>ZULU: {zulu}</div>
-<div style={s.slotCount}>{filledCount}/100 FILLED{overdueCount > 0 && <span style={{ color: "#e74c3c", marginLeft: "10px" }}>⚠ {overdueCount} OVERDUE</span>}</div>
-</div>
-</div>
+  return (
+    <div style={s.wrap}>
+      <div style={s.header}>
+        <div>
+          <div style={s.title}>MOVING <span style={s.gold}>&</span> TRACKING</div>
+          <div style={s.sub}>BDL STATUS BOARD // LIVE PERSONNEL TRACKING</div>
+        </div>
+        <div style={s.clockWrap}>
+          <div style={s.bhrClock}>{bhr}</div>
+          <div style={s.bhrLabel}>BAHRAIN LOCAL</div>
+          <div style={s.zuluClock}>ZULU: {zulu}</div>
+          <div style={s.slotCount}>{filledCount}/100 FILLED{overdueCount > 0 && <span style={{ color: "#e74c3c", marginLeft: "10px" }}>⚠ {overdueCount} OVERDUE</span>}</div>
+        </div>
+      </div>
 
-<div style={s.tabs}>
-<button style={s.tab(activeTab === "board")} onClick={() => setActiveTab("board")}>Board</button>
-<button style={s.tab(activeTab === "locations")} onClick={() => setActiveTab("locations")}>Locations ({locations.length})</button>
-</div>
+      <div style={s.tabs}>
+        <button style={s.tab(activeTab === "board")} onClick={() => setActiveTab("board")}>Board</button>
+        <button style={s.tab(activeTab === "locations")} onClick={() => setActiveTab("locations")}>Locations ({locations.length})</button>
+      </div>
 
-<div style={s.body}>
-{activeTab === "board" && (
-<>
-{/* Stats */}
-<div style={s.statsRow}>
-{STAT_DEFS.map(({ key, label, color }) => {
-const count = key === "TOTAL" ? filledCount : key === "OVERDUE" ? overdueCount : (statusCounts[key] || 0);
-return (
-<div key={key} style={s.statCard(color)}>
-<div style={{ width: 7, height: 7, borderRadius: "50%", background: count > 0 ? color : "#2a3440", flexShrink: 0, boxShadow: key === "OVERDUE" && count > 0 ? `0 0 6px ${color}` : undefined }} />
-<div>
-<div style={s.statNum(count > 0 ? color : "#fff")}>{count}</div>
-<div style={s.statLbl}>{label}</div>
-</div>
-</div>
-);
-})}
-</div>
+      <div style={s.body}>
+        {activeTab === "board" && (
+          <>
+            {/* Stats */}
+            <div style={s.statsRow}>
+              {STAT_DEFS.map(({ key, label, color }) => {
+                const count = key === "TOTAL" ? filledCount : key === "OVERDUE" ? overdueCount : (statusCounts[key] || 0);
+                return (
+                  <div key={key} style={s.statCard(color)}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: count > 0 ? color : "#2a3440", flexShrink: 0, boxShadow: key === "OVERDUE" && count > 0 ? `0 0 6px ${color}` : undefined }} />
+                    <div>
+                      <div style={s.statNum(count > 0 ? color : "#fff")}>{count}</div>
+                      <div style={s.statLbl}>{label}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
-{/* Alert */}
-{overdueRows.length > 0 && (
-<div style={s.alert}>
-<div style={s.alertTitle}>⚠ OVERDUE PERSONNEL</div>
-<div>{overdueRows.map((r, i) => <span key={i} style={s.alertTag}>{r.name} — {overdueStr(r)}</span>)}</div>
-</div>
-)}
+            {/* Alert */}
+            {overdueRows.length > 0 && (
+              <div style={s.alert}>
+                <div style={s.alertTitle}>⚠ OVERDUE PERSONNEL</div>
+                <div>{overdueRows.map((r, i) => <span key={i} style={s.alertTag}>{r.name} — {overdueStr(r)}</span>)}</div>
+              </div>
+            )}
 
-{/* Table */}
-<div style={s.tableWrap}>
-<table style={{ width: "100%", borderCollapse: "collapse" }}>
-<thead>
-<tr>{["#", "Name", "Location", "Status", "Due Back (BHR)", "Notes"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
-</thead>
-<tbody>
-{rows.map((r, i) => {
-const od = isOverdue(r);
-return (
-<tr key={i} style={{ background: od ? "rgba(231,76,60,0.07)" : "transparent" }}>
-<td style={{ ...s.td, color: "#5a6a7a", fontSize: "11px", width: "28px" }}>{r.id}</td>
-<td style={s.td}>
-<input style={s.inp} value={r.name} placeholder="—" onChange={e => update(i, "name", e.target.value.toUpperCase())} maxLength={25} />
-{od && <><span style={s.overdueBadge}>OVRD</span><span style={s.overdueTime}>{overdueStr(r)}</span></>}
-</td>
-<td style={{ ...s.td, minWidth: "110px" }}>
-<select style={s.sel(r.location, locColorMap)} value={r.location} onChange={e => update(i, "location", e.target.value)}>
-<option value="">—</option>
-{locations.map(l => <option key={l} value={l}>{l}</option>)}
-</select>
-</td>
-<td style={{ ...s.td, minWidth: "100px" }}>
-<select style={s.sel(r.status, STATUS_COLOR)} value={r.status} onChange={e => update(i, "status", e.target.value)}>
-<option value="">—</option>
-{STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
-</select>
-</td>
-<td style={s.td}>
-<input type="time" style={s.timeInp(r.status === "IN" || r.status === "")} value={r.dueBack} disabled={r.status === "IN" || r.status === ""} onChange={e => update(i, "dueBack", e.target.value)} />
-</td>
-<td style={{ ...s.td, minWidth: "110px" }}>
-<input style={s.notesInp} value={r.notes} placeholder="—" onChange={e => update(i, "notes", e.target.value)} maxLength={60} />
-</td>
-</tr>
-);
-})}
-</tbody>
-</table>
-</div>
-</>
-)}
+            {/* Table */}
+            <div style={s.tableWrap}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>{["#", "Name", "Location", "Status", "Due Back (BHR)", "Notes"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => {
+                    const od = isOverdue(r);
+                    return (
+                      <tr key={i} style={{ background: od ? "rgba(231,76,60,0.07)" : "transparent" }}>
+                        <td style={{ ...s.td, color: "#5a6a7a", fontSize: "11px", width: "28px" }}>{r.id}</td>
+                        <td style={s.td}>
+                          <input style={s.inp} value={r.name} placeholder="—" onChange={e => update(i, "name", e.target.value.toUpperCase())} maxLength={25} />
+                          {od && <><span style={s.overdueBadge}>OVRD</span><span style={s.overdueTime}>{overdueStr(r)}</span></>}
+                        </td>
+                        <td style={{ ...s.td, minWidth: "110px" }}>
+                          <select style={s.sel(r.location, locColorMap)} value={r.location} onChange={e => update(i, "location", e.target.value)}>
+                            <option value="">—</option>
+                            {locations.map(l => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                        </td>
+                        <td style={{ ...s.td, minWidth: "100px" }}>
+                          <select style={s.sel(r.status, STATUS_COLOR)} value={r.status} onChange={e => update(i, "status", e.target.value)}>
+                            <option value="">—</option>
+                            {STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+                          </select>
+                        </td>
+                        <td style={s.td}>
+                          <input type="time" style={s.timeInp(r.status === "IN" || r.status === "")} value={r.dueBack} disabled={r.status === "IN" || r.status === ""} onChange={e => update(i, "dueBack", e.target.value)} />
+                        </td>
+                        <td style={{ ...s.td, minWidth: "110px" }}>
+                          <input style={s.notesInp} value={r.notes} placeholder="—" onChange={e => update(i, "notes", e.target.value)} maxLength={60} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
-{activeTab === "locations" && (
-<>
-<div style={{ marginBottom: "16px", fontSize: "11px", color: "#5a6a7a", letterSpacing: "1px" }}>ADD OR REMOVE LOCATIONS — CHANGES APPLY INSTANTLY</div>
-<div style={s.addRow}>
-<input style={s.addInp} value={newLoc} placeholder="TYPE NEW LOCATION..." onChange={e => setNewLoc(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && addLocation()} maxLength={20} />
-<button style={s.addBtn} onClick={addLocation}>+ ADD</button>
-</div>
-<div style={{ fontSize: "10px", color: "#5a6a7a", letterSpacing: "1px" }}>Press ADD or hit Enter.</div>
-<div style={{ margin: "20px 0 10px", fontSize: "10px", color: "#c9a84c", letterSpacing: "3px" }}>CURRENT LOCATIONS ({locations.length})</div>
-<div style={s.locGrid}>
-{locations.map((l, i) => {
-const c = LOC_PALETTE[i % LOC_PALETTE.length];
-return (
-<div key={l} style={s.locChip(c)}>
-<div style={{ width: 7, height: 7, borderRadius: "50%", background: c, flexShrink: 0 }} />
-{l}
-<button style={s.removeBtn} onClick={() => removeLocation(l)}>✕</button>
-</div>
-);
-})}
-</div>
-<div style={{ marginTop: "16px", background: "rgba(231,76,60,0.06)", border: "1px solid rgba(231,76,60,0.2)", padding: "10px 14px", fontSize: "11px", color: "#8a9aaa" }}>
-⚠ Removing a location clears it from any personnel currently assigned to it.
-</div>
-</>
-)}
-</div>
-</div>
-);
+        {activeTab === "locations" && (
+          <>
+            <div style={{ marginBottom: "16px", fontSize: "11px", color: "#5a6a7a", letterSpacing: "1px" }}>ADD OR REMOVE LOCATIONS — CHANGES APPLY INSTANTLY</div>
+            <div style={s.addRow}>
+              <input style={s.addInp} value={newLoc} placeholder="TYPE NEW LOCATION..." onChange={e => setNewLoc(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && addLocation()} maxLength={20} />
+              <button style={s.addBtn} onClick={addLocation}>+ ADD</button>
+            </div>
+            <div style={{ fontSize: "10px", color: "#5a6a7a", letterSpacing: "1px" }}>Press ADD or hit Enter.</div>
+            <div style={{ margin: "20px 0 10px", fontSize: "10px", color: "#c9a84c", letterSpacing: "3px" }}>CURRENT LOCATIONS ({locations.length})</div>
+            <div style={s.locGrid}>
+              {locations.map((l, i) => {
+                const c = LOC_PALETTE[i % LOC_PALETTE.length];
+                return (
+                  <div key={l} style={s.locChip(c)}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: c, flexShrink: 0 }} />
+                    {l}
+                    <button style={s.removeBtn} onClick={() => removeLocation(l)}>✕</button>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: "16px", background: "rgba(231,76,60,0.06)", border: "1px solid rgba(231,76,60,0.2)", padding: "10px 14px", fontSize: "11px", color: "#8a9aaa" }}>
+              ⚠ Removing a location clears it from any personnel currently assigned to it.
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
