@@ -1,1 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WH Shifts — Moving & Tracking</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080a0d;color:#d4dde8;font-family:'Share Tech Mono',monospace;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025)1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025)1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding-bottom:40px}
+header{background:#0d1117;border-bottom:2px solid #c9a84c;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;letter-spacing:5px;color:#fff;text-transform:uppercase}
+.title b{color:#c9a84c}
+.sub{font-size:9px;color:#5a6a7a;letter-spacing:3px;margin-top:3px;text-transform:uppercase}
+.back{background:rgba(201,168,76,0.1);border:1px solid #c9a84c;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:8px 16px;cursor:pointer;text-decoration:none;display:inline-block}
+.body{padding:14px 20px}
+.nav{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.nav-btn{background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer}
+.wk-title{color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;letter-spacing:3px}
+.lock-status{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;margin-left:8px}
+.lock-btn{background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);color:#e74c3c;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:5px 10px;cursor:pointer}
+/* PIN */
+.pin-wrap{background:#0f1318;border:1px solid #1e2630;padding:20px;margin-bottom:20px;max-width:280px}
+.pin-title{font-size:10px;color:#c9a84c;letter-spacing:3px;margin-bottom:16px}
+.pin-dots{display:flex;gap:10px;justify-content:center;margin-bottom:16px}
+.pin-dot{width:40px;height:40px;border:1px solid #1e2630;display:flex;align-items:center;justify-content:center;font-size:24px;color:#c9a84c}
+.pin-err{color:#e74c3c;font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:10px;display:none}
+.pin-grid{display:grid;grid-template-columns:repeat(3,70px);gap:8px;justify-content:center}
+.pin-btn{background:#0f1318;border:1px solid #1e2630;color:#d4dde8;font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;width:70px;height:60px;cursor:pointer}
+.pin-ok{background:rgba(201,168,76,0.15);border-color:#c9a84c;color:#c9a84c;font-size:14px}
+.pin-del{color:#e74c3c;border-color:rgba(231,76,60,0.3)}
+/* DAY CARDS */
+.day-card{background:#0f1318;border:1px solid #1e2630;padding:14px 16px;margin-bottom:12px}
+.day-hdr{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #1e2630;padding-bottom:10px;margin-bottom:4px}
+.day-lbl{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#c9a84c;letter-spacing:3px}
+.day-date{font-size:12px;color:#5a6a7a;letter-spacing:2px}
+.sec-hdr{font-size:9px;color:#c9a84c;letter-spacing:3px;margin:12px 0 7px}
+.field-row{display:flex;gap:8px;margin-bottom:7px;align-items:center;flex-wrap:wrap}
+.field-lbl{font-size:9px;color:#5a6a7a;letter-spacing:2px;min-width:75px;flex-shrink:0}
+.pax-lbl{font-size:9px;color:#5a6a7a;letter-spacing:2px;margin-bottom:6px}
+.pax-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+select.nd{appearance:none;-webkit-appearance:none;background:#080a0d;border:1px solid #1e2630;color:#5a6a7a;font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 7px;cursor:pointer;outline:none;width:100%;min-width:130px;border-radius:0}
+select.vd{appearance:none;-webkit-appearance:none;background:#080a0d;border:1px solid #c9a84c33;color:#5a6a7a;font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 7px;cursor:pointer;outline:none;width:100%;min-width:130px;border-radius:0}
+select.has-val{color:#fff}
+select.vd.has-val{color:#c9a84c}
+.spin{display:flex;justify-content:center;padding:40px;color:#5a6a7a;font-size:12px;letter-spacing:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="title">MOVING <b>&</b> TRACKING</div>
+      <div class="sub">WH Shift Pattern // White House</div>
+    </div>
+    <a href="index.html" class="back">◀ BACK TO BOARD</a>
+  </header>
+  <div class="body">
+    <div id="nav-area"></div>
+    <div id="pin-area"></div>
+    <div id="days-area"></div>
+  </div>
+</div>
+<script>
+firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
+var db = firebase.database();
+
+var PIN = "0121";
+var unlocked = false;
+var pin = "";
+var DAYS = ["SAT","SUN","MON","TUE","WED","THU","FRI"];
+var MONS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+var boardNames = [];
+var vehicleList = [];
+var weekStart = (function(){
+  var n=new Date(new Date().getTime()+3*3600000);
+  var day=n.getUTCDay();
+  var diff=day===6?0:(day+1)%7;
+  return new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()-diff)).getTime();
+})();
+
+// Load board names and vehicles
+db.ref("board").on("value",function(s){
+  var d=s.val()||{};
+  boardNames=Object.values(d).filter(function(r){return r&&r.name;}).map(function(r){return r.name;});
+  if(unlocked) renderDays();
+});
+db.ref("vehicles").on("value",function(s){
+  var d=s.val()||{};
+  vehicleList=Object.values(d).filter(function(v){return v&&v.vrn;}).map(function(v){
+    return v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:"");
+  });
+  if(unlocked) renderDays();
+});
+
+function wkKey(){return "w"+weekStart;}
+
+function writeField(dk,field,val){
+  var u={};u[field]=val;
+  db.ref("whshifts/"+wkKey()+"/"+dk).update(u);
+}
+
+function mkSel(type,currentVal,options,placeholder,dk,field){
+  var sel=document.createElement("select");
+  sel.className=type+(currentVal?" has-val":"");
+  var opt0=document.createElement("option");opt0.value="";opt0.textContent=placeholder;sel.appendChild(opt0);
+  options.forEach(function(o){
+    var op=document.createElement("option");op.value=o;op.textContent=o;
+    if(o===currentVal)op.selected=true;
+    sel.appendChild(op);
+  });
+  sel.onchange=function(){
+    if(!unlocked)return;
+    var val=sel.value;
+    sel.className=type+(val?" has-val":"");
+    writeField(dk,field,val);
+  };
+  return sel;
+}
+
+function mkRow(label,el){
+  var row=document.createElement("div");row.className="field-row";
+  var lbl=document.createElement("span");lbl.className="field-lbl";lbl.textContent=label;
+  row.appendChild(lbl);row.appendChild(el);return row;
+}
+
+function renderDays(){
+  var area=document.getElementById("days-area");
+  area.innerHTML="";
+  var wk=wkKey();
+  // Load all shift data for this week then render
+  db.ref("whshifts/"+wk).once("value",function(snap){
+    var weekData=snap.val()||{};
+    area.innerHTML="";
+    for(var i=0;i<7;i++){
+      var d=new Date(weekStart+i*86400000);
+      var lbl=DAYS[i],dt=d.getUTCDate(),mo=MONS[d.getUTCMonth()],dk=lbl.toLowerCase();
+      var dayData=weekData[dk]||{};
+      var card=buildDayCard(lbl,dt,mo,dk,dayData);
+      area.appendChild(card);
+    }
+  });
+}
+
+function buildDayCard(lbl,dt,mo,dk,d){
+  var card=document.createElement("div");card.className="day-card";
+  // Header
+  var hdr=document.createElement("div");hdr.className="day-hdr";
+  var hl=document.createElement("span");hl.className="day-lbl";hl.textContent=lbl;
+  var hd=document.createElement("span");hd.className="day-date";hd.textContent=dt+" "+mo;
+  hdr.appendChild(hl);hdr.appendChild(hd);card.appendChild(hdr);
+
+  function sh(txt){var e=document.createElement("div");e.className="sec-hdr";e.textContent=txt;card.appendChild(e);}
+  function nd(fld,ph){return mkSel("nd",d[fld]||"",boardNames,ph||"— SELECT —",dk,fld);}
+  function vd(fld){return mkSel("vd",d[fld]||"",vehicleList,"— SELECT VEH —",dk,fld);}
+  function paxRow(prefix){
+    var pl=document.createElement("div");pl.className="pax-lbl";pl.textContent="PAX (UP TO 4)";card.appendChild(pl);
+    var pr=document.createElement("div");pr.className="pax-row";
+    [1,2,3,4].forEach(function(n){pr.appendChild(nd(prefix+"Pax"+n,"PAX "+n));});
+    card.appendChild(pr);
+  }
+
+  sh("WH SHIFT");
+  card.appendChild(mkRow("PERSON 1",nd("shift1")));
+  card.appendChild(mkRow("PERSON 2",nd("shift2")));
+  sh("COURIER");
+  card.appendChild(mkRow("PERSON",nd("courierPerson")));
+  card.appendChild(mkRow("VEHICLE",vd("courierVeh")));
+  paxRow("courier");
+  sh("ESCORT");
+  card.appendChild(mkRow("PERSON",nd("escortPerson")));
+  card.appendChild(mkRow("VEHICLE",vd("escortVeh")));
+  paxRow("escort");
+  return card;
+}
+
+function renderNav(){
+  var area=document.getElementById("nav-area");area.innerHTML="";
+  var nav=document.createElement("div");nav.className="nav";
+  var sd=new Date(weekStart),ed=new Date(weekStart+6*86400000);
+  var prev=document.createElement("button");prev.className="nav-btn";prev.textContent="◀ PREV";prev.onclick=function(){weekStart-=7*86400000;renderNav();if(unlocked)renderDays();};
+  var title=document.createElement("div");title.className="wk-title";title.textContent=sd.getUTCDate()+" "+MONS[sd.getUTCMonth()]+" — "+ed.getUTCDate()+" "+MONS[ed.getUTCMonth()];
+  var next=document.createElement("button");next.className="nav-btn";next.textContent="NEXT ▶";next.onclick=function(){weekStart+=7*86400000;renderNav();if(unlocked)renderDays();};
+  var ls=document.createElement("span");ls.className="lock-status";ls.style.color=unlocked?"#2ecc71":"#e74c3c";ls.textContent=unlocked?"🔓 UNLOCKED":"🔒 READ ONLY";
+  nav.appendChild(prev);nav.appendChild(title);nav.appendChild(next);nav.appendChild(ls);
+  if(unlocked){var lb=document.createElement("button");lb.className="lock-btn";lb.textContent="LOCK";lb.onclick=function(){unlocked=false;pin="";render();};nav.appendChild(lb);}
+  area.appendChild(nav);
+}
+
+function renderPin(){
+  var area=document.getElementById("pin-area");area.innerHTML="";
+  if(unlocked)return;
+  var wrap=document.createElement("div");wrap.className="pin-wrap";
+  var title=document.createElement("div");title.className="pin-title";title.textContent="ENTER PIN TO EDIT";
+  var dots=document.createElement("div");dots.className="pin-dots";
+  var dotEls=[0,1,2,3].map(function(){var d=document.createElement("div");d.className="pin-dot";dots.appendChild(d);return d;});
+  var err=document.createElement("div");err.className="pin-err";err.textContent="INCORRECT PIN";
+  var updateDots=function(){dotEls.forEach(function(d,i){d.textContent=i<pin.length?"●":"";d.style.borderColor=i<pin.length?"#c9a84c":"#1e2630";});};
+  var grid=document.createElement("div");grid.className="pin-grid";
+  var tryUnlock=function(){if(pin===PIN){unlocked=true;render();}else{err.style.display="block";pin="";updateDots();}};
+  var addDigit=function(n){if(pin.length<4){pin+=n;updateDots();err.style.display="none";if(pin.length===4)setTimeout(tryUnlock,50);}};
+  [1,2,3,4,5,6,7,8,9].forEach(function(n){var b=document.createElement("button");b.className="pin-btn";b.textContent=n;b.onclick=function(){addDigit(String(n));};grid.appendChild(b);});
+  var del=document.createElement("button");del.className="pin-btn pin-del";del.textContent="⌫";del.onclick=function(){pin=pin.slice(0,-1);updateDots();err.style.display="none";};grid.appendChild(del);
+  var zero=document.createElement("button");zero.className="pin-btn";zero.textContent="0";zero.onclick=function(){addDigit("0");};grid.appendChild(zero);
+  var ok=document.createElement("button");ok.className="pin-btn pin-ok";ok.textContent="OK";ok.onclick=tryUnlock;grid.appendChild(ok);
+  wrap.appendChild(title);wrap.appendChild(dots);wrap.appendChild(err);wrap.appendChild(grid);area.appendChild(wrap);
+}
+
+function render(){
+  renderNav();
+  renderPin();
+  if(unlocked) renderDays();
+  else{var a=document.getElementById("days-area");a.innerHTML='<div class="spin">ENTER PIN TO VIEW AND EDIT SHIFTS</div>';}
+}
+
+render();
+</script>
+</body>
+</html>
 
