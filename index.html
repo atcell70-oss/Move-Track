@@ -26,6 +26,7 @@ select{-webkit-appearance:none;appearance:none}
 </head>
 <body>
 <div id="root"></div>
+<div id="wh-root" style="display:none;position:relative;z-index:1"></div>
 <script type="text/babel">
 firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
 const db = firebase.database();
@@ -150,162 +151,6 @@ function TimePicker({time, date, onConfirm, onClear, onClose}){
   );
 }
 
-// ── WH SHIFTS TAB ──
-const DAYS_WH = ["SAT","SUN","MON","TUE","WED","THU","FRI"];
-const MONTHS_WH = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-const WH_PIN = "0121";
-
-function DayCard({dayLabel,date,month,dayKey,weekKey,dayData,boardNames,vehicleList,writeWH,s,f,unlocked}){
-  // Use uncontrolled selects — no React state for field values
-  // This prevents re-render on change which causes iOS/Chrome to dismiss dropdown
-  const dataRef = useRef(dayData||{});
-  const mountKey = weekKey+dayKey; // only remount when week changes
-
-  const write = (field,val) => {
-    if(!unlocked)return;
-    dataRef.current={...dataRef.current,[field]:val};
-    writeWH(weekKey,dayKey,field,val);
-  };
-
-  const nd = {appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:"#d4dde8",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",minWidth:"130px",borderRadius:"0"};
-  const vd = {...nd,color:"#c9a84c",borderColor:"#c9a84c33",borderWidth:"1px",borderStyle:"solid"};
-
-  // Uncontrolled select — uses defaultValue, onChange writes to Firebase only
-  const ND = ({fld,placeholder}) => (
-    <select
-      key={mountKey+fld}
-      defaultValue={dayData[fld]||""}
-      onChange={e=>write(fld,e.target.value)}
-      style={{...nd,color:(dayData[fld]||dataRef.current[fld])?"#fff":"#5a6a7a"}}
-    >
-      <option value="">{placeholder||"— SELECT —"}</option>
-      {boardNames.map(n=><option key={n} value={n}>{n}</option>)}
-    </select>
-  );
-
-  const VD = ({fld}) => (
-    <select
-      key={mountKey+fld}
-      defaultValue={dayData[fld]||""}
-      onChange={e=>write(fld,e.target.value)}
-      style={{...vd,color:(dayData[fld]||dataRef.current[fld])?"#c9a84c":"#5a6a7a"}}
-    >
-      <option value="">— SELECT VEH —</option>
-      {vehicleList.map(v=><option key={v.value} value={v.value}>{v.label}</option>)}
-    </select>
-  );
-
-  const sh = {fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",margin:"12px 0 7px"};
-  const fr = {display:"flex",gap:"8px",marginBottom:"7px",alignItems:"center",flexWrap:"wrap"};
-  const lb = {fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"75px",flexShrink:0};
-  const pl = {fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"6px"};
-
-  return (
-    <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
-      <div style={{display:"flex",alignItems:"baseline",gap:"10px",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"4px"}}>
-        <span style={{fontFamily:f.sans,fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>{dayLabel}</span>
-        <span style={{fontFamily:f.mono,fontSize:"12px",color:"#5a6a7a",letterSpacing:"2px"}}>{date} {month}</span>
-      </div>
-
-      <div style={sh}>WH SHIFT</div>
-      <div style={fr}><span style={lb}>PERSON 1</span><ND fld="shift1" placeholder="— SELECT —"/></div>
-      <div style={fr}><span style={lb}>PERSON 2</span><ND fld="shift2" placeholder="— SELECT —"/></div>
-
-      <div style={sh}>COURIER</div>
-      <div style={fr}><span style={lb}>PERSON</span><ND fld="courierPerson"/></div>
-      <div style={fr}><span style={lb}>VEHICLE</span><VD fld="courierVeh"/></div>
-      <div style={pl}>PAX (UP TO 4)</div>
-      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"4px"}}>
-        {[1,2,3,4].map(n=><ND key={n} fld={"courierPax"+n} placeholder={"PAX "+n}/>)}
-      </div>
-
-      <div style={sh}>ESCORT</div>
-      <div style={fr}><span style={lb}>PERSON</span><ND fld="escortPerson"/></div>
-      <div style={fr}><span style={lb}>VEHICLE</span><VD fld="escortVeh"/></div>
-      <div style={pl}>PAX (UP TO 4)</div>
-      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"4px"}}>
-        {[1,2,3,4].map(n=><ND key={n} fld={"escortPax"+n} placeholder={"PAX "+n}/>)}
-      </div>
-    </div>
-  );
-}
-
-function WHTab({whShifts,writeWH,weekStart,setWeekStart,boardNames,vehicleList,s,f}){
-  const [unlocked,setUnlocked] = useState(false);
-  const [pin,setPin] = useState("");
-  const [pinErr,setPinErr] = useState(false);
-
-  const weekKey = "w"+weekStart;
-  const weekDates = Array.from({length:7},(_,i)=>{
-    const d=new Date(weekStart+i*86400000);
-    return{label:DAYS_WH[i],date:d.getUTCDate(),month:MONTHS_WH[d.getUTCMonth()],key:DAYS_WH[i].toLowerCase()};
-  });
-  const startD=weekDates[0],endD=weekDates[6];
-
-  const tryUnlock = () => {
-    if(pin===WH_PIN){setUnlocked(true);setPin("");setPinErr(false);}
-    else{setPinErr(true);setPin("");}
-  };
-
-  const fnt = f.mono;
-  const pinBtn = (n) => (
-    <button key={n} onClick={()=>setPin(p=>p.length<4?p+n:p)}
-      style={{background:"#0f1318",border:"1px solid #1e2630",color:"#d4dde8",fontFamily:fnt,fontSize:"20px",fontWeight:"bold",width:"70px",height:"60px",cursor:"pointer",letterSpacing:"1px"}}>
-      {n}
-    </button>
-  );
-
-  return <>
-    <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px",flexWrap:"wrap"}}>
-      <button onClick={()=>setWeekStart(w=>w-7*86400000)} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>◀ PREV</button>
-      <div style={{color:"#fff",fontFamily:f.sans,fontSize:"18px",fontWeight:"900",letterSpacing:"3px"}}>
-        {startD.date} {startD.month} — {endD.date} {endD.month}
-      </div>
-      <button onClick={()=>setWeekStart(w=>w+7*86400000)} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>NEXT ▶</button>
-      {unlocked
-        ? <span style={{color:"#2ecc71",fontFamily:fnt,fontSize:"10px",letterSpacing:"2px",marginLeft:"8px"}}>🔓 UNLOCKED</span>
-        : <span style={{color:"#e74c3c",fontFamily:fnt,fontSize:"10px",letterSpacing:"2px",marginLeft:"8px"}}>🔒 READ ONLY</span>
-      }
-      {unlocked&&<button onClick={()=>setUnlocked(false)} style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",color:"#e74c3c",fontFamily:fnt,fontSize:"10px",letterSpacing:"2px",padding:"5px 10px",cursor:"pointer"}}>LOCK</button>}
-    </div>
-
-    {/* PIN pad if locked */}
-    {!unlocked&&<div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"20px",marginBottom:"20px",maxWidth:"280px"}}>
-      <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"16px"}}>ENTER PIN TO EDIT</div>
-      {/* PIN display */}
-      <div style={{display:"flex",gap:"10px",justifyContent:"center",marginBottom:"16px"}}>
-        {[0,1,2,3].map(i=>(
-          <div key={i} style={{width:"40px",height:"40px",border:`1px solid ${pin.length>i?"#c9a84c":"#1e2630"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"24px",color:"#c9a84c"}}>
-            {pin.length>i?"●":""}
-          </div>
-        ))}
-      </div>
-      {pinErr&&<div style={{color:"#e74c3c",fontSize:"10px",letterSpacing:"2px",textAlign:"center",marginBottom:"10px"}}>INCORRECT PIN</div>}
-      {/* Number pad */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,70px)",gap:"8px",justifyContent:"center"}}>
-        {[1,2,3,4,5,6,7,8,9].map(n=>pinBtn(String(n)))}
-        <button onClick={()=>setPin(p=>p.slice(0,-1))} style={{background:"#0f1318",border:"1px solid #e74c3c44",color:"#e74c3c",fontFamily:fnt,fontSize:"14px",width:"70px",height:"60px",cursor:"pointer"}}>⌫</button>
-        {pinBtn("0")}
-        <button onClick={tryUnlock} style={{background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",letterSpacing:"1px",width:"70px",height:"60px",cursor:"pointer"}}>OK</button>
-      </div>
-    </div>}
-
-    {weekDates.map(({label,date,month,key})=>(
-      <DayCard
-        key={weekKey+key}
-        dayLabel={label} date={date} month={month}
-        dayKey={key} weekKey={weekKey}
-        dayData={(whShifts[weekKey]||{})[key]||{}}
-        boardNames={boardNames}
-        vehicleList={vehicleList}
-        writeWH={writeWH}
-        unlocked={unlocked}
-        s={s} f={f}
-      />
-    ))}
-  </>;
-}
-
 // ── MAIN APP ──
 function App(){
   const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:""})));
@@ -318,14 +163,7 @@ function App(){
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
   const [picker,setPicker] = useState(null);
-  const [whShifts,setWhShifts] = useState({});
-  const [weekStart,setWeekStart] = useState(()=>{
-    const n=new Date(new Date().getTime()+3*3600000);
-    const day=n.getUTCDay();
-    const diff=(day===6)?0:(day+1)%7;
-    const sat=new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()-diff));
-    return sat.getTime();
-  });
+
   const [dragSrc,setDragSrc] = useState(null);
   const [dragOver,setDragOver] = useState(null);
   const rowsRef = useRef(rows);
@@ -351,9 +189,7 @@ function App(){
       const data=snap.val()||{};
       setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",...(data[i]||{})})));
     });
-    const whRef = db.ref("whshifts");
-    whRef.on("value",snap=>{ setWhShifts(snap.val()||{}); });
-    return()=>{clearInterval(clk);boardRef.off();locRef.off();vRef.off();fcRef.off();whRef.off();};
+    return()=>{clearInterval(clk);boardRef.off();locRef.off();vRef.off();fcRef.off();};
   },[]);
 
   const writeField = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
@@ -365,7 +201,7 @@ function App(){
   };
   const writeVehicle = (i,field,value) => { const u={}; u[field]=value; db.ref("vehicles/"+i).update(u); };
   const writeFuelCard = (i,field,value) => { const u={}; u[field]=value; db.ref("fuelcards/"+i).update(u); };
-  const writeWH = (weekKey,dayKey,field,value) => { const u={}; u[field]=value; db.ref("whshifts/"+weekKey+"/"+dayKey).update(u); };
+
 
   const updateRow = (i,field,val) => {
     setRows(prev=>{ const n=[...prev]; n[i]={...n[i],[field]:val}; if(field==="status"&&val==="IN"){n[i].dueBack="";n[i].dueDate="";} return n; });
@@ -709,17 +545,6 @@ function App(){
           </div>
         </>}
 
-        {/* ── WH SHIFTS TAB ── */}
-        {tab==="wh"&&<WHTab
-          whShifts={whShifts}
-          setWhShifts={setWhShifts}
-          writeWH={writeWH}
-          weekStart={weekStart}
-          setWeekStart={setWeekStart}
-          boardNames={rows.filter(r=>r.name).map(r=>r.name)}
-          vehicleList={vehicles.filter(v=>v.vrn).map(v=>({label:v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:""),value:v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:"")}))}
-          s={s} f={f}
-        />}
 
       </div>
 
@@ -736,5 +561,291 @@ function App(){
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
+
+<script>
+// ── WH SHIFTS — VANILLA JS (outside React) ──
+var WH_PIN = "0121";
+var whUnlocked = false;
+var whWeekStart = (function(){
+  var n=new Date(new Date().getTime()+3*3600000);
+  var day=n.getUTCDay();
+  var diff=(day===6)?0:(day+1)%7;
+  return new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()-diff)).getTime();
+})();
+var whData = {};
+var whBoardNames = [];
+var whVehicleList = [];
+var DAYS_WH = ["SAT","SUN","MON","TUE","WED","THU","FRI"];
+var MONTHS_WH = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+function whPad(n){return String(n).padStart(2,"0");}
+
+// Listen to Firebase for WH data, board names, vehicles
+firebase.database().ref("whshifts").on("value",function(s){whData=s.val()||{};});
+firebase.database().ref("board").on("value",function(s){
+  var d=s.val()||{};
+  whBoardNames=Object.values(d).filter(function(r){return r&&r.name;}).map(function(r){return r.name;});
+});
+firebase.database().ref("vehicles").on("value",function(s){
+  var d=s.val()||{};
+  whVehicleList=Object.values(d).filter(function(v){return v&&v.vrn;}).map(function(v){
+    return v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:"");
+  });
+});
+
+function whWrite(weekKey,dayKey,field,val){
+  var u={};u[field]=val;
+  firebase.database().ref("whshifts/"+weekKey+"/"+dayKey).update(u);
+}
+
+function whGetDay(dayKey){
+  var wk="w"+whWeekStart;
+  return (whData[wk]||{})[dayKey]||{};
+}
+
+function makeSelect(fld,dayKey,options,placeholder,isVeh){
+  var d=whGetDay(dayKey);
+  var val=d[fld]||"";
+  var wk="w"+whWeekStart;
+  var sel=document.createElement("select");
+  sel.style.cssText="appearance:none;-webkit-appearance:none;background:#080a0d;border:1px solid "+(isVeh?"#c9a84c33":"#1e2630")+";color:"+(val?(isVeh?"#c9a84c":"#fff"):"#5a6a7a")+";font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 7px;outline:none;width:100%;min-width:130px;border-radius:0;cursor:pointer";
+  var opt0=document.createElement("option");opt0.value="";opt0.textContent=placeholder||"— SELECT —";sel.appendChild(opt0);
+  options.forEach(function(o){
+    var op=document.createElement("option");op.value=o;op.textContent=o;if(o===val)op.selected=true;sel.appendChild(op);
+  });
+  sel.addEventListener("change",function(){
+    if(!whUnlocked){sel.value=val;return;}
+    whWrite(wk,dayKey,fld,sel.value);
+    sel.style.color=sel.value?(isVeh?"#c9a84c":"#fff"):"#5a6a7a";
+  });
+  return sel;
+}
+
+function makeRow(label,el){
+  var row=document.createElement("div");
+  row.style.cssText="display:flex;gap:8px;margin-bottom:7px;align-items:center;flex-wrap:wrap";
+  var lb=document.createElement("span");
+  lb.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:2px;min-width:75px;flex-shrink:0;font-family:'Share Tech Mono',monospace";
+  lb.textContent=label;
+  row.appendChild(lb);row.appendChild(el);return row;
+}
+
+function makeSectionTitle(txt){
+  var d=document.createElement("div");
+  d.style.cssText="font-size:9px;color:#c9a84c;letter-spacing:3px;margin:12px 0 7px;font-family:'Share Tech Mono',monospace";
+  d.textContent=txt;return d;
+}
+
+function makePaxRow(prefix,dayKey){
+  var wrap=document.createElement("div");
+  var lbl=document.createElement("div");
+  lbl.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:2px;margin-bottom:6px;font-family:'Share Tech Mono',monospace";
+  lbl.textContent="PAX (UP TO 4)";
+  wrap.appendChild(lbl);
+  var row=document.createElement("div");
+  row.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px";
+  [1,2,3,4].forEach(function(n){
+    row.appendChild(makeSelect(prefix+"Pax"+n,dayKey,whBoardNames,"PAX "+n,false));
+  });
+  wrap.appendChild(row);return wrap;
+}
+
+function buildDayCard(i){
+  var d=new Date(whWeekStart+i*86400000);
+  var label=DAYS_WH[i];
+  var date=d.getUTCDate();
+  var month=MONTHS_WH[d.getUTCMonth()];
+  var dayKey=label.toLowerCase();
+
+  var card=document.createElement("div");
+  card.style.cssText="background:#0f1318;border:1px solid #1e2630;padding:14px 16px;margin-bottom:12px";
+
+  // Day header
+  var hdr=document.createElement("div");
+  hdr.style.cssText="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #1e2630;padding-bottom:10px;margin-bottom:4px";
+  var hl=document.createElement("span");
+  hl.style.cssText="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#c9a84c;letter-spacing:3px";
+  hl.textContent=label;
+  var hd=document.createElement("span");
+  hd.style.cssText="font-family:'Share Tech Mono',monospace;font-size:12px;color:#5a6a7a;letter-spacing:2px";
+  hd.textContent=date+" "+month;
+  hdr.appendChild(hl);hdr.appendChild(hd);card.appendChild(hdr);
+
+  // WH Shift
+  card.appendChild(makeSectionTitle("WH SHIFT"));
+  card.appendChild(makeRow("PERSON 1",makeSelect("shift1",dayKey,whBoardNames,"— SELECT —",false)));
+  card.appendChild(makeRow("PERSON 2",makeSelect("shift2",dayKey,whBoardNames,"— SELECT —",false)));
+
+  // Courier
+  card.appendChild(makeSectionTitle("COURIER"));
+  card.appendChild(makeRow("PERSON",makeSelect("courierPerson",dayKey,whBoardNames,"— SELECT —",false)));
+  card.appendChild(makeRow("VEHICLE",makeSelect("courierVeh",dayKey,whVehicleList,"— SELECT VEH —",true)));
+  card.appendChild(makePaxRow("courier",dayKey));
+
+  // Escort
+  card.appendChild(makeSectionTitle("ESCORT"));
+  card.appendChild(makeRow("PERSON",makeSelect("escortPerson",dayKey,whBoardNames,"— SELECT —",false)));
+  card.appendChild(makeRow("VEHICLE",makeSelect("escortVeh",dayKey,whVehicleList,"— SELECT VEH —",true)));
+  card.appendChild(makePaxRow("escort",dayKey));
+
+  return card;
+}
+
+function buildWeekNav(){
+  var d=new Date(whWeekStart);
+  var startD=new Date(whWeekStart);
+  var endD=new Date(whWeekStart+6*86400000);
+  var nav=document.createElement("div");
+  nav.style.cssText="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap";
+
+  var prev=document.createElement("button");
+  prev.textContent="◀ PREV";
+  prev.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer";
+  prev.onclick=function(){whWeekStart-=7*86400000;window.renderWH();};
+
+  var title=document.createElement("div");
+  title.style.cssText="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;letter-spacing:3px";
+  title.textContent=startD.getUTCDate()+" "+MONTHS_WH[startD.getUTCMonth()]+" — "+endD.getUTCDate()+" "+MONTHS_WH[endD.getUTCMonth()];
+
+  var next=document.createElement("button");
+  next.textContent="NEXT ▶";
+  next.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer";
+  next.onclick=function(){whWeekStart+=7*86400000;window.renderWH();};
+
+  var lockStatus=document.createElement("span");
+  lockStatus.style.cssText="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;margin-left:8px;color:"+(whUnlocked?"#2ecc71":"#e74c3c");
+  lockStatus.textContent=whUnlocked?"🔓 UNLOCKED":"🔒 READ ONLY";
+
+  nav.appendChild(prev);nav.appendChild(title);nav.appendChild(next);nav.appendChild(lockStatus);
+
+  if(whUnlocked){
+    var lockBtn=document.createElement("button");
+    lockBtn.textContent="LOCK";
+    lockBtn.style.cssText="background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);color:#e74c3c;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:5px 10px;cursor:pointer";
+    lockBtn.onclick=function(){whUnlocked=false;window.renderWH();};
+    nav.appendChild(lockBtn);
+  }
+  return nav;
+}
+
+function buildPinPad(){
+  var pin="";
+  var wrap=document.createElement("div");
+  wrap.style.cssText="background:#0f1318;border:1px solid #1e2630;padding:20px;margin-bottom:20px;max-width:280px";
+
+  var title=document.createElement("div");
+  title.style.cssText="font-size:10px;color:#c9a84c;letter-spacing:3px;margin-bottom:16px;font-family:'Share Tech Mono',monospace";
+  title.textContent="ENTER PIN TO EDIT";
+
+  var dots=document.createElement("div");
+  dots.style.cssText="display:flex;gap:10px;justify-content:center;margin-bottom:16px";
+  var dotEls=[0,1,2,3].map(function(){
+    var d=document.createElement("div");
+    d.style.cssText="width:40px;height:40px;border:1px solid #1e2630;display:flex;align-items:center;justify-content:center;font-size:24px;color:#c9a84c;font-family:'Share Tech Mono',monospace";
+    dots.appendChild(d);return d;
+  });
+
+  var errEl=document.createElement("div");
+  errEl.style.cssText="color:#e74c3c;font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:10px;font-family:'Share Tech Mono',monospace;display:none";
+  errEl.textContent="INCORRECT PIN";
+
+  var updateDots=function(){dotEls.forEach(function(d,i){d.textContent=i<pin.length?"●":"";d.style.borderColor=i<pin.length?"#c9a84c":"#1e2630";});};
+
+  var grid=document.createElement("div");
+  grid.style.cssText="display:grid;grid-template-columns:repeat(3,70px);gap:8px;justify-content:center";
+
+  var makeBtn=function(label,action){
+    var b=document.createElement("button");
+    b.textContent=label;
+    b.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#d4dde8;font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;width:70px;height:60px;cursor:pointer";
+    b.onclick=action;return b;
+  };
+
+  [1,2,3,4,5,6,7,8,9].forEach(function(n){
+    grid.appendChild(makeBtn(String(n),function(){if(pin.length<4){pin+=String(n);updateDots();};}));
+  });
+
+  var delBtn=makeBtn("⌫",function(){pin=pin.slice(0,-1);updateDots();errEl.style.display="none";});
+  delBtn.style.color="#e74c3c";delBtn.style.borderColor="rgba(231,76,60,0.3)";grid.appendChild(delBtn);
+
+  grid.appendChild(makeBtn("0",function(){if(pin.length<4){pin+="0";updateDots();}}));
+
+  var okBtn=makeBtn("OK",function(){
+    if(pin===WH_PIN){whUnlocked=true;window.renderWH();}
+    else{errEl.style.display="block";pin="";updateDots();}
+  });
+  okBtn.style.background="rgba(201,168,76,0.15)";okBtn.style.borderColor="#c9a84c";okBtn.style.color="#c9a84c";okBtn.style.fontSize="14px";
+  grid.appendChild(okBtn);
+
+  wrap.appendChild(title);wrap.appendChild(dots);wrap.appendChild(errEl);wrap.appendChild(grid);
+  return wrap;
+}
+
+// Build header (matches React header styling)
+function buildWHHeader(){
+  var hdr=document.createElement("div");
+  hdr.style.cssText="background:#0d1117;border-bottom:2px solid #c9a84c;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px";
+
+  var left=document.createElement("div");
+  var title=document.createElement("div");
+  title.style.cssText="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;letter-spacing:5px;color:#fff;text-transform:uppercase";
+  title.innerHTML='MOVING <span style="color:#c9a84c">&</span> TRACKING';
+  var sub=document.createElement("div");
+  sub.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:3px;margin-top:3px;text-transform:uppercase";
+  sub.textContent="BDL Status Board // Live Personnel Tracking";
+  left.appendChild(title);left.appendChild(sub);
+
+  hdr.appendChild(left);
+  return hdr;
+}
+
+function buildWHTabs(){
+  var tabs=document.createElement("div");
+  tabs.style.cssText="display:flex;border-bottom:1px solid #1e2630;background:#0a0c0f;flex-wrap:wrap";
+  var tabNames=[["board","Board"],["locs","Locations"],["vehicles","Vehicles"],["fuelcards","Fuel Cards"],["wh","WH Shifts"]];
+  tabNames.forEach(function(t){
+    var btn=document.createElement("button");
+    btn.textContent=t[1];
+    var isActive=t[0]==="wh";
+    btn.style.cssText="background:"+(isActive?"#0f1318":"transparent")+";border:none;border-bottom:2px solid "+(isActive?"#c9a84c":"transparent")+";color:"+(isActive?"#c9a84c":"#5a6a7a")+";font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:11px 20px;cursor:pointer;text-transform:uppercase;margin-bottom:-1px";
+    btn.onclick=function(){
+      if(t[0]==="wh")return;
+      // Switch back to React
+      document.getElementById("wh-root").style.display="none";
+      document.getElementById("root").style.display="block";
+      // Click the matching React tab
+      var reactBtn=document.getElementById("wh-tab-btn");
+      if(reactBtn){
+        // find sibling buttons
+        var allBtns=reactBtn.parentElement.querySelectorAll("button");
+        allBtns.forEach(function(b){if(b.textContent.toLowerCase().indexOf(t[0].replace("locs","location"))>=0||b.textContent.toLowerCase()===t[1].toLowerCase()||b.textContent.toLowerCase().startsWith(t[1].toLowerCase())){b.click();}});
+      }
+    };
+    tabs.appendChild(btn);
+  });
+  return tabs;
+}
+
+window.renderWH = function(){
+  var root=document.getElementById("wh-root");
+  root.innerHTML="";
+  root.style.background="#080a0d";
+  root.style.minHeight="100vh";
+
+  root.appendChild(buildWHHeader());
+  root.appendChild(buildWHTabs());
+
+  var body=document.createElement("div");
+  body.style.cssText="padding:14px 20px;max-width:1400px;margin:0 auto";
+
+  body.appendChild(buildWeekNav());
+  if(!whUnlocked) body.appendChild(buildPinPad());
+
+  for(var i=0;i<7;i++) body.appendChild(buildDayCard(i));
+
+  root.appendChild(body);
+};
+</script>
+
 </body>
 </html>
