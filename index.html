@@ -156,43 +156,40 @@ const MONTHS_WH = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","
 const WH_PIN = "0121";
 
 function DayCard({dayLabel,date,month,dayKey,weekKey,dayData,boardNames,vehicleList,writeWH,s,f,unlocked}){
-  // Initialize from Firebase data once — never re-sync to avoid wipe on selection
-  const [data,setData] = useState(()=>dayData||{});
-  const prevWeekKey = useRef(weekKey);
+  // Use uncontrolled selects — no React state for field values
+  // This prevents re-render on change which causes iOS/Chrome to dismiss dropdown
+  const dataRef = useRef(dayData||{});
+  const mountKey = weekKey+dayKey; // only remount when week changes
 
-  // Only reset when week changes, not on every Firebase update
-  useEffect(()=>{
-    if(prevWeekKey.current!==weekKey){
-      setData(dayData||{});
-      prevWeekKey.current=weekKey;
-    }
-  },[weekKey]);
-
-  // When Firebase first loads data for this day (was empty), populate it
-  useEffect(()=>{
-    if(dayData&&Object.keys(dayData).length>0&&Object.keys(data).length===0){
-      setData(dayData);
-    }
-  },[]);
-
-  const set = (field,val) => {
+  const write = (field,val) => {
     if(!unlocked)return;
-    setData(prev=>({...prev,[field]:val}));
+    dataRef.current={...dataRef.current,[field]:val};
     writeWH(weekKey,dayKey,field,val);
   };
 
-  const nd = {appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:"#fff",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:unlocked?"pointer":"not-allowed",outline:"none",width:"100%",minWidth:"130px",borderRadius:"0",opacity:unlocked?1:0.5};
-  const vd = {...nd,color:"#c9a84c",borderColor:"#c9a84c33"};
+  const nd = {appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:"#d4dde8",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",minWidth:"130px",borderRadius:"0"};
+  const vd = {...nd,color:"#c9a84c",borderColor:"#c9a84c33",borderWidth:"1px",borderStyle:"solid"};
 
+  // Uncontrolled select — uses defaultValue, onChange writes to Firebase only
   const ND = ({fld,placeholder}) => (
-    <select value={data[fld]||""} onChange={e=>{if(unlocked){set(fld,e.target.value);}else{e.target.value=data[fld]||"";}}} style={{...nd,color:data[fld]?"#fff":"#5a6a7a"}}>
+    <select
+      key={mountKey+fld}
+      defaultValue={dayData[fld]||""}
+      onChange={e=>write(fld,e.target.value)}
+      style={{...nd,color:(dayData[fld]||dataRef.current[fld])?"#fff":"#5a6a7a"}}
+    >
       <option value="">{placeholder||"— SELECT —"}</option>
       {boardNames.map(n=><option key={n} value={n}>{n}</option>)}
     </select>
   );
 
   const VD = ({fld}) => (
-    <select value={data[fld]||""} onChange={e=>{if(unlocked){set(fld,e.target.value);}else{e.target.value=data[fld]||"";}}} style={{...vd,color:data[fld]?"#c9a84c":"#5a6a7a"}}>
+    <select
+      key={mountKey+fld}
+      defaultValue={dayData[fld]||""}
+      onChange={e=>write(fld,e.target.value)}
+      style={{...vd,color:(dayData[fld]||dataRef.current[fld])?"#c9a84c":"#5a6a7a"}}
+    >
       <option value="">— SELECT VEH —</option>
       {vehicleList.map(v=><option key={v.value} value={v.value}>{v.label}</option>)}
     </select>
@@ -741,4 +738,3 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
-
