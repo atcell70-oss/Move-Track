@@ -150,6 +150,103 @@ function TimePicker({time, date, onConfirm, onClear, onClose}){
   );
 }
 
+// ── WH SHIFTS TAB ──
+const DAYS_WH = ["SAT","SUN","MON","TUE","WED","THU","FRI"];
+const MONTHS_WH = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+function DayCard({dayLabel,date,month,dayKey,weekKey,dayData,boardNames,vehicleList,writeWH,s,f}){
+  const [data,setData] = useState(dayData||{});
+
+  // Sync from parent when dayData changes (Firebase update)
+  useEffect(()=>{ setData(dayData||{}); },[JSON.stringify(dayData)]);
+
+  const set = (field,val) => {
+    setData(prev=>({...prev,[field]:val}));
+    writeWH(weekKey,dayKey,field,val);
+  };
+
+  const ND = ({fld,placeholder}) => (
+    <select value={data[fld]||""} onChange={e=>set(fld,e.target.value)}
+      style={{appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:data[fld]?"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",minWidth:"130px",borderRadius:"0"}}>
+      <option value="">{placeholder||"— SELECT —"}</option>
+      {boardNames.map(n=><option key={n} value={n}>{n}</option>)}
+    </select>
+  );
+
+  const VD = ({fld}) => (
+    <select value={data[fld]||""} onChange={e=>set(fld,e.target.value)}
+      style={{appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #c9a84c22",color:data[fld]?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",minWidth:"130px",borderRadius:"0",borderColor:data[fld]?"#c9a84c55":"#1e2630"}}>
+      <option value="">— SELECT VEH —</option>
+      {vehicleList.map(v=><option key={v.value} value={v.value}>{v.label}</option>)}
+    </select>
+  );
+
+  const sh = {fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",margin:"12px 0 7px"};
+  const fr = {display:"flex",gap:"8px",marginBottom:"7px",alignItems:"center",flexWrap:"wrap"};
+  const lb = {fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"75px",flexShrink:0};
+  const pl = {fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"6px"};
+
+  return (
+    <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
+      <div style={{display:"flex",alignItems:"baseline",gap:"10px",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"4px"}}>
+        <span style={{fontFamily:f.sans,fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>{dayLabel}</span>
+        <span style={{fontFamily:f.mono,fontSize:"12px",color:"#5a6a7a",letterSpacing:"2px"}}>{date} {month}</span>
+      </div>
+
+      <div style={sh}>WH SHIFT</div>
+      <div style={fr}><span style={lb}>PERSON 1</span><ND fld="shift1" placeholder="— SELECT —"/></div>
+      <div style={fr}><span style={lb}>PERSON 2</span><ND fld="shift2" placeholder="— SELECT —"/></div>
+
+      <div style={sh}>COURIER</div>
+      <div style={fr}><span style={lb}>PERSON</span><ND fld="courierPerson"/></div>
+      <div style={fr}><span style={lb}>VEHICLE</span><VD fld="courierVeh"/></div>
+      <div style={pl}>PAX (UP TO 4)</div>
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"4px"}}>
+        {[1,2,3,4].map(n=><ND key={n} fld={"courierPax"+n} placeholder={"PAX "+n}/>)}
+      </div>
+
+      <div style={sh}>ESCORT</div>
+      <div style={fr}><span style={lb}>PERSON</span><ND fld="escortPerson"/></div>
+      <div style={fr}><span style={lb}>VEHICLE</span><VD fld="escortVeh"/></div>
+      <div style={pl}>PAX (UP TO 4)</div>
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"4px"}}>
+        {[1,2,3,4].map(n=><ND key={n} fld={"escortPax"+n} placeholder={"PAX "+n}/>)}
+      </div>
+    </div>
+  );
+}
+
+function WHTab({whShifts,setWhShifts,writeWH,weekStart,setWeekStart,boardNames,vehicleList,s,f}){
+  const weekKey = "w"+weekStart;
+  const weekDates = Array.from({length:7},(_,i)=>{
+    const d=new Date(weekStart+i*86400000);
+    return{label:DAYS_WH[i],date:d.getUTCDate(),month:MONTHS_WH[d.getUTCMonth()],key:DAYS_WH[i].toLowerCase()};
+  });
+  const startD=weekDates[0],endD=weekDates[6];
+
+  return <>
+    <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px",flexWrap:"wrap"}}>
+      <button onClick={()=>setWeekStart(w=>w-7*86400000)} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:f.mono,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>◀ PREV</button>
+      <div style={{color:"#fff",fontFamily:f.sans,fontSize:"18px",fontWeight:"900",letterSpacing:"3px"}}>
+        {startD.date} {startD.month} — {endD.date} {endD.month}
+      </div>
+      <button onClick={()=>setWeekStart(w=>w+7*86400000)} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:f.mono,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>NEXT ▶</button>
+    </div>
+    {weekDates.map(({label,date,month,key})=>(
+      <DayCard
+        key={weekKey+key}
+        dayLabel={label} date={date} month={month}
+        dayKey={key} weekKey={weekKey}
+        dayData={(whShifts[weekKey]||{})[key]||{}}
+        boardNames={boardNames}
+        vehicleList={vehicleList}
+        writeWH={writeWH}
+        s={s} f={f}
+      />
+    ))}
+  </>;
+}
+
 // ── MAIN APP ──
 function App(){
   const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:""})));
@@ -554,124 +651,16 @@ function App(){
         </>}
 
         {/* ── WH SHIFTS TAB ── */}
-        {tab==="wh"&&(()=>{
-          const DAYS=["SAT","SUN","MON","TUE","WED","THU","FRI"];
-          const boardNames=rows.filter(r=>r.name).map(r=>r.name);
-          const vehicleList=vehicles.filter(v=>v.vrn).map(v=>v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:""));
-          const weekKey="w"+weekStart;
-          const weekDates=Array.from({length:7},(_,i)=>{
-            const d=new Date(weekStart+i*86400000);
-            return{label:DAYS[i],date:d.getUTCDate(),month:MONTHS[d.getUTCMonth()],key:DAYS[i].toLowerCase()};
-          });
-          const prevWeek=()=>setWeekStart(w=>w-7*86400000);
-          const nextWeek=()=>setWeekStart(w=>w+7*86400000);
-          const startD=weekDates[0];const endD=weekDates[6];
-          const NameDrop=({val,onChange,placeholder})=>(
-            <select
-              value={val||""}
-              onChange={e=>onChange(e.target.value)}
-              style={{...s.sel("",[]),fontFamily:f.mono,fontSize:"11px",width:"100%",minWidth:"120px",background:"#080a0d",border:"1px solid #1e2630",color:val?"#fff":"#5a6a7a"}}
-            >
-              <option value="">{placeholder||"— SELECT —"}</option>
-              {boardNames.map(n=><option key={n} value={n}>{n}</option>)}
-            </select>
-          );
-          const VehDrop=({val,onChange})=>(
-            <select
-              value={val||""}
-              onChange={e=>onChange(e.target.value)}
-              style={{...s.sel("",[]),fontFamily:f.mono,fontSize:"11px",width:"100%",minWidth:"120px",background:"#080a0d",border:"1px solid #1e2630",color:val?"#c9a84c":"#5a6a7a"}}
-            >
-              <option value="">— SELECT VEH —</option>
-              {vehicleList.map(v=><option key={v} value={v}>{v}</option>)}
-            </select>
-          );
-          const getDay=(dayKey)=>((whShifts[weekKey]||{})[dayKey]||{});
-          const setDay=(dayKey,field,val)=>{
-            setWhShifts(prev=>{
-              const n={...prev};
-              n[weekKey]={...(n[weekKey]||{})};
-              n[weekKey][dayKey]={...(n[weekKey][dayKey]||{}),[field]:val};
-              return n;
-            });
-            writeWH(weekKey,dayKey,field,val);
-          };
-          return <>
-            {/* Week nav */}
-            <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px",flexWrap:"wrap"}}>
-              <button onClick={prevWeek} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:f.mono,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>◀ PREV</button>
-              <div style={{color:"#fff",fontFamily:f.sans,fontSize:"18px",fontWeight:"900",letterSpacing:"3px"}}>
-                {startD.date} {startD.month} — {endD.date} {endD.month}
-              </div>
-              <button onClick={nextWeek} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:f.mono,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>NEXT ▶</button>
-            </div>
-
-            {/* Day cards */}
-            {weekDates.map(({label,date,month,key})=>{
-              const d=getDay(key);
-              const secHdr={fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",margin:"12px 0 8px",textTransform:"uppercase"};
-              const fieldRow={display:"flex",gap:"8px",marginBottom:"8px",flexWrap:"wrap",alignItems:"center"};
-              const fieldLbl={fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"80px",flexShrink:0};
-              const paxInp={background:"#080a0d",border:"1px solid #1e2630",color:"#fff",fontFamily:f.mono,fontSize:"11px",padding:"4px 7px",outline:"none",width:"120px"};
-              return <div key={key} style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
-                {/* Day header */}
-                <div style={{display:"flex",alignItems:"baseline",gap:"10px",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"4px"}}>
-                  <span style={{fontFamily:f.sans,fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>{label}</span>
-                  <span style={{fontFamily:f.mono,fontSize:"12px",color:"#5a6a7a",letterSpacing:"2px"}}>{date} {month}</span>
-                </div>
-
-                {/* WH Shift */}
-                <div style={secHdr}>WH SHIFT</div>
-                <div style={fieldRow}>
-                  <span style={fieldLbl}>PERSON 1</span>
-                  <NameDrop val={d.shift1} onChange={v=>setDay(key,"shift1",v)} placeholder="— SELECT —"/>
-                </div>
-                <div style={fieldRow}>
-                  <span style={fieldLbl}>PERSON 2</span>
-                  <NameDrop val={d.shift2} onChange={v=>setDay(key,"shift2",v)} placeholder="— SELECT —"/>
-                </div>
-
-                {/* Courier */}
-                <div style={secHdr}>COURIER</div>
-                <div style={fieldRow}>
-                  <span style={fieldLbl}>PERSON</span>
-                  <NameDrop val={d.courierPerson} onChange={v=>setDay(key,"courierPerson",v)}/>
-                </div>
-                <div style={fieldRow}>
-                  <span style={fieldLbl}>VEHICLE</span>
-                  <VehDrop val={d.courierVeh} onChange={v=>setDay(key,"courierVeh",v)}/>
-                </div>
-                <div style={{marginBottom:"6px"}}>
-                  <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"6px"}}>PAX (UP TO 4)</div>
-                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                    {[1,2,3,4].map(n=>(
-                      <NameDrop key={n} val={d["courierPax"+n]} onChange={v=>setDay(key,"courierPax"+n,v)} placeholder={"PAX "+n}/>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Escort */}
-                <div style={secHdr}>ESCORT</div>
-                <div style={fieldRow}>
-                  <span style={fieldLbl}>PERSON</span>
-                  <NameDrop val={d.escortPerson} onChange={v=>setDay(key,"escortPerson",v)}/>
-                </div>
-                <div style={fieldRow}>
-                  <span style={fieldLbl}>VEHICLE</span>
-                  <VehDrop val={d.escortVeh} onChange={v=>setDay(key,"escortVeh",v)}/>
-                </div>
-                <div style={{marginBottom:"6px"}}>
-                  <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"6px"}}>PAX (UP TO 4)</div>
-                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                    {[1,2,3,4].map(n=>(
-                      <NameDrop key={n} val={d["escortPax"+n]} onChange={v=>setDay(key,"escortPax"+n,v)} placeholder={"PAX "+n}/>
-                    ))}
-                  </div>
-                </div>
-              </div>;
-            })}
-          </>;
-        })()}
+        {tab==="wh"&&<WHTab
+          whShifts={whShifts}
+          setWhShifts={setWhShifts}
+          writeWH={writeWH}
+          weekStart={weekStart}
+          setWeekStart={setWeekStart}
+          boardNames={rows.filter(r=>r.name).map(r=>r.name)}
+          vehicleList={vehicles.filter(v=>v.vrn).map(v=>({label:v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:""),value:v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:"")}))}
+          s={s} f={f}
+        />}
 
       </div>
 
