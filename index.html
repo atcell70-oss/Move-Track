@@ -10,15 +10,19 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>
+// Firebase init OUTSIDE babel so both React and vanilla JS can use it
+firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
+window.db = firebase.database();
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{min-height:100vh}
 body{background:#080a0d;color:#d4dde8}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
 #root{position:relative;z-index:1}
+#wh-root{position:relative;z-index:1;display:none;background:#080a0d;min-height:100vh}
 select{-webkit-appearance:none;appearance:none}
-.pcol{-ms-overflow-style:none;scrollbar-width:none}
-.pcol::-webkit-scrollbar{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes rp{0%,100%{background:rgba(231,76,60,0.07)}50%{background:rgba(231,76,60,0.13)}}
 @keyframes alertpulse{0%,100%{box-shadow:0 0 0 0 rgba(231,76,60,0.2)}50%{box-shadow:0 0 8px 2px rgba(231,76,60,0.15)}}
@@ -26,14 +30,14 @@ select{-webkit-appearance:none;appearance:none}
 </head>
 <body>
 <div id="root"></div>
-<div id="wh-root" style="display:none;position:relative;z-index:1"></div>
-<script type="text/babel">
-firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
-const db = firebase.database();
+<div id="wh-root"></div>
 
+<script type="text/babel">
+const db = window.db;
 const DEFAULT_LOCS = ["WHITEHOUSE","BEB","BDL","OUT"];
 const STATUSES = ["IN","OUT","R&R","MEDICAL","TASKING"];
 const PAL = ["#c9a84c","#3498db","#2ecc71","#9b59b6","#e74c3c","#e67e22","#1abc9c","#e91e63","#00bcd4","#8bc34a"];
+const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 const SCOL = {
   IN:{color:"#2ecc71",bg:"rgba(46,204,113,0.15)"},
   OUT:{color:"#e74c3c",bg:"rgba(231,76,60,0.15)"},
@@ -42,108 +46,90 @@ const SCOL = {
   TASKING:{color:"#9b59b6",bg:"rgba(155,89,182,0.15)"},
   "":{color:"#5a6a7a",bg:"transparent"},
 };
-const MONTHS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+const APP_PIN = "0121";
 
 const pad = n => String(n).padStart(2,"0");
-const bhrNow = () => { const n=new Date(),h=(n.getUTCHours()+3)%24; return `${pad(h)}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())}`; };
-const zuluNow = () => { const n=new Date(); return `${pad(n.getUTCHours())}:${pad(n.getUTCMinutes())}:${pad(n.getUTCSeconds())}`; };
+const bhrNow = () => { const n=new Date(),h=(n.getUTCHours()+3)%24; return pad(h)+":"+pad(n.getUTCMinutes())+":"+pad(n.getUTCSeconds()); };
+const zuluNow = () => { const n=new Date(); return pad(n.getUTCHours())+":"+pad(n.getUTCMinutes())+":"+pad(n.getUTCSeconds()); };
 const nowMins = () => { const n=new Date(); return ((n.getUTCHours()+3)%24)*60+n.getUTCMinutes(); };
 const toMins = t => { if(!t||!t.includes(":"))return null; const[h,m]=t.split(":").map(Number); return h*60+m; };
 const isOvd = r => {
   if(!r||!r.dueBack||r.status==="IN"||!r.status)return false;
-  const now=new Date();
-  const nowBhr=new Date(now.getTime()+3*3600000);
   if(r.dueDate){
+    const now=new Date(new Date().getTime()+3*3600000);
     const[d,mo]=r.dueDate.split("/").map(Number);
-    const dueD=new Date(Date.UTC(nowBhr.getUTCFullYear(),mo-1,d));
-    const todayD=new Date(Date.UTC(nowBhr.getUTCFullYear(),nowBhr.getUTCMonth(),nowBhr.getUTCDate()));
-    if(dueD>todayD)return false;
-    if(dueD<todayD)return true;
+    const due=new Date(Date.UTC(now.getUTCFullYear(),mo-1,d));
+    const today=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()));
+    if(due>today)return false;
+    if(due<today)return true;
   }
   const m=toMins(r.dueBack); return m!==null&&nowMins()>m;
 };
-const ovdStr = r => { const d=nowMins()-toMins(r.dueBack),h=Math.floor(d/60),m=d%60; return h>0?`+${h}H ${m}M`:`+${m}M`; };
+const ovdStr = r => { const d=nowMins()-toMins(r.dueBack),h=Math.floor(d/60),m=d%60; return h>0?"+"+h+"H "+m+"M":"+"+m+"M"; };
 
 const {useState,useEffect,useRef} = React;
 
-// ── TIME + DATE PICKER ──
-function TimePicker({time, date, onConfirm, onClear, onClose}){
-  const [h, setH] = React.useState(parseInt((time||"00:00").split(":")[0])||0);
-  const [m, setM] = React.useState(parseInt((time||"00:00").split(":")[1])||0);
-  const now = new Date(new Date().getTime()+3*3600000);
-  const [day, setDay] = React.useState(date?parseInt(date.split("/")[0]):now.getUTCDate());
-  const [mon, setMon] = React.useState(date?parseInt(date.split("/")[1])-1:now.getUTCMonth());
-
-  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(),mon+1,0)).getUTCDate();
-  const days = Array.from({length:daysInMonth},(_,i)=>i+1);
-
+// PIN PAD COMPONENT
+function PinPad({onUnlock,title}){
+  const [pin,setPin] = useState("");
+  const [err,setErr] = useState(false);
   const fnt = "'Share Tech Mono',monospace";
-  const btnStyle = (sel) => ({
-    background:sel?"rgba(201,168,76,0.2)":"#080a0d",
-    border:`1px solid ${sel?"#c9a84c":"#1e2630"}`,
-    color:sel?"#c9a84c":"#5a6a7a",
-    fontFamily:fnt,fontSize:"12px",padding:"6px 8px",
-    cursor:"pointer",minWidth:"40px",letterSpacing:"1px"
-  });
-  const lbl = {fontSize:"9px",color:"#5a6a7a",letterSpacing:"3px",marginBottom:"8px"};
+  const tryUnlock = () => {
+    if(pin===APP_PIN){onUnlock();}
+    else{setErr(true);setPin("");}
+  };
+  const addDigit = d => { if(pin.length<4)setPin(p=>p+d); setErr(false); };
+  const btnS = {background:"#0f1318",border:"1px solid #1e2630",color:"#d4dde8",fontFamily:fnt,fontSize:"20px",fontWeight:"bold",width:"70px",height:"60px",cursor:"pointer"};
+  return (
+    <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"20px",marginBottom:"20px",maxWidth:"280px"}}>
+      <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"16px",fontFamily:fnt}}>{title||"ENTER PIN TO EDIT"}</div>
+      <div style={{display:"flex",gap:"10px",justifyContent:"center",marginBottom:"16px"}}>
+        {[0,1,2,3].map(i=>(
+          <div key={i} style={{width:"40px",height:"40px",border:"1px solid "+(pin.length>i?"#c9a84c":"#1e2630"),display:"flex",alignItems:"center",justifyContent:"center",fontSize:"24px",color:"#c9a84c",fontFamily:fnt}}>
+            {pin.length>i?"●":""}
+          </div>
+        ))}
+      </div>
+      {err&&<div style={{color:"#e74c3c",fontSize:"10px",letterSpacing:"2px",textAlign:"center",marginBottom:"10px",fontFamily:fnt}}>INCORRECT PIN</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,70px)",gap:"8px",justifyContent:"center"}}>
+        {[1,2,3,4,5,6,7,8,9].map(n=><button key={n} style={btnS} onClick={()=>addDigit(String(n))}>{n}</button>)}
+        <button style={{...btnS,color:"#e74c3c",borderColor:"rgba(231,76,60,0.3)"}} onClick={()=>{setPin(p=>p.slice(0,-1));setErr(false);}}>⌫</button>
+        <button style={btnS} onClick={()=>addDigit("0")}>0</button>
+        <button style={{...btnS,background:"rgba(201,168,76,0.15)",borderColor:"#c9a84c",color:"#c9a84c",fontSize:"14px"}} onClick={tryUnlock}>OK</button>
+      </div>
+    </div>
+  );
+}
 
+// TIME PICKER
+function TimePicker({time,date,onConfirm,onClear,onClose}){
+  const [h,setH] = useState(parseInt((time||"00:00").split(":")[0])||0);
+  const [m,setM] = useState(parseInt((time||"00:00").split(":")[1])||0);
+  const now = new Date(new Date().getTime()+3*3600000);
+  const [day,setDay] = useState(date?parseInt(date.split("/")[0]):now.getUTCDate());
+  const [mon,setMon] = useState(date?parseInt(date.split("/")[1])-1:now.getUTCMonth());
+  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(),mon+1,0)).getUTCDate();
+  const fnt = "'Share Tech Mono',monospace";
+  const btnS = (sel) => ({background:sel?"rgba(201,168,76,0.2)":"#080a0d",border:"1px solid "+(sel?"#c9a84c":"#1e2630"),color:sel?"#c9a84c":"#5a6a7a",fontFamily:fnt,fontSize:"12px",padding:"6px 8px",cursor:"pointer",minWidth:"40px",letterSpacing:"1px"});
+  const lbl = {fontSize:"9px",color:"#5a6a7a",letterSpacing:"3px",marginBottom:"8px",fontFamily:fnt};
   return (
     <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",overflowY:"auto"}}>
       <div style={{background:"#0f1318",border:"1px solid #c9a84c",width:"100%",maxWidth:"380px",fontFamily:fnt}}>
         <div style={{background:"#0d1117",borderBottom:"1px solid #7a6330",padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{color:"#c9a84c",fontSize:"11px",letterSpacing:"3px"}}>DUE BACK — DATE & TIME (BHR)</span>
-          <button onClick={onClose} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px",lineHeight:1}}>✕</button>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px"}}>✕</button>
         </div>
         <div style={{padding:"16px 20px"}}>
-          {/* Big display */}
-          <div style={{textAlign:"center",fontSize:"36px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",color:"#c9a84c",letterSpacing:"4px",marginBottom:"16px"}}>
+          <div style={{textAlign:"center",fontSize:"32px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",color:"#c9a84c",letterSpacing:"4px",marginBottom:"16px"}}>
             {pad(day)} {MONTHS[mon]} — {pad(h)}:{pad(m)}
           </div>
-
-          {/* Month */}
-          <div style={{marginBottom:"14px"}}>
-            <div style={lbl}>MONTH</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
-              {MONTHS.map((mo2,i)=>(
-                <button key={i} onClick={()=>{setMon(i);const dim=new Date(Date.UTC(now.getUTCFullYear(),i+1,0)).getUTCDate();if(day>dim)setDay(dim);}} style={btnStyle(mon===i)}>{mo2}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Day */}
-          <div style={{marginBottom:"14px"}}>
-            <div style={lbl}>DAY</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
-              {days.map(d=>(
-                <button key={d} onClick={()=>setDay(d)} style={btnStyle(day===d)}>{pad(d)}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Hour */}
-          <div style={{marginBottom:"14px"}}>
-            <div style={lbl}>HOUR</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
-              {Array.from({length:24},(_,i)=>i).map(hh=>(
-                <button key={hh} onClick={()=>setH(hh)} style={btnStyle(h===hh)}>{pad(hh)}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Minute */}
-          <div style={{marginBottom:"20px"}}>
-            <div style={lbl}>MINUTE</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
-              {[0,5,10,15,20,25,30,35,40,45,50,55].map(mm=>(
-                <button key={mm} onClick={()=>setM(mm)} style={btnStyle(m===mm)}>{pad(mm)}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Actions */}
+          <div style={{marginBottom:"12px"}}><div style={lbl}>MONTH</div><div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>{MONTHS.map((mo,i)=><button key={i} onClick={()=>{setMon(i);const dim=new Date(Date.UTC(now.getUTCFullYear(),i+1,0)).getUTCDate();if(day>dim)setDay(dim);}} style={btnS(mon===i)}>{mo}</button>)}</div></div>
+          <div style={{marginBottom:"12px"}}><div style={lbl}>DAY</div><div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>{Array.from({length:daysInMonth},(_,i)=>i+1).map(d=><button key={d} onClick={()=>setDay(d)} style={btnS(day===d)}>{pad(d)}</button>)}</div></div>
+          <div style={{marginBottom:"12px"}}><div style={lbl}>HOUR</div><div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>{Array.from({length:24},(_,i)=>i).map(hh=><button key={hh} onClick={()=>setH(hh)} style={btnS(h===hh)}>{pad(hh)}</button>)}</div></div>
+          <div style={{marginBottom:"20px"}}><div style={lbl}>MINUTE</div><div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>{[0,5,10,15,20,25,30,35,40,45,50,55].map(mm=><button key={mm} onClick={()=>setM(mm)} style={btnS(m===mm)}>{pad(mm)}</button>)}</div></div>
           <div style={{display:"flex",gap:"8px"}}>
             <button onClick={onClear} style={{flex:1,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.4)",color:"#e74c3c",fontFamily:fnt,fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CLEAR</button>
-            <button onClick={()=>onConfirm(pad(h)+":"+pad(m), pad(day)+"/"+pad(mon+1))} style={{flex:2,background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CONFIRM</button>
+            <button onClick={()=>onConfirm(pad(h)+":"+pad(m),pad(day)+"/"+pad(mon+1))} style={{flex:2,background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CONFIRM</button>
           </div>
         </div>
       </div>
@@ -151,19 +137,19 @@ function TimePicker({time, date, onConfirm, onClear, onClose}){
   );
 }
 
-// ── MAIN APP ──
+// MAIN APP
 function App(){
   const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:""})));
   const [locs,setLocs] = useState(DEFAULT_LOCS);
-  const [vehicles,setVehicles] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:""})));
-  const [fuelCards,setFuelCards] = useState(()=>Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:""})));
+  const [vehicles,setVehicles] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",location:""})));
+  const [fuelCards,setFuelCards] = useState(()=>Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",location:""})));
   const [tab,setTab] = useState("board");
   const [newLoc,setNewLoc] = useState("");
   const [bhr,setBhr] = useState(bhrNow());
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
   const [picker,setPicker] = useState(null);
-
+  const [locsUnlocked,setLocsUnlocked] = useState(false);
   const [dragSrc,setDragSrc] = useState(null);
   const [dragOver,setDragOver] = useState(null);
   const rowsRef = useRef(rows);
@@ -171,52 +157,45 @@ function App(){
 
   useEffect(()=>{
     const clk = setInterval(()=>{setBhr(bhrNow());setZulu(zuluNow());},1000);
-    const boardRef = db.ref("board");
-    boardRef.on("value",snap=>{
+    db.ref("board").on("value",snap=>{
       const data=snap.val()||{};
       setRows(Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:"",...(data[i]||{})})));
       setConnected(true);
     });
-    const locRef = db.ref("locations");
-    locRef.on("value",snap=>{ const v=snap.val(); if(Array.isArray(v)&&v.length>0)setLocs(v); });
-    const vRef = db.ref("vehicles");
-    vRef.on("value",snap=>{
+    db.ref("locations").on("value",snap=>{ const v=snap.val(); if(Array.isArray(v)&&v.length>0)setLocs(v); });
+    db.ref("vehicles").on("value",snap=>{
       const data=snap.val()||{};
-      setVehicles(Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",...(data[i]||{})})));
+      setVehicles(Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",location:"",...(data[i]||{})})));
     });
-    const fcRef = db.ref("fuelcards");
-    fcRef.on("value",snap=>{
+    db.ref("fuelcards").on("value",snap=>{
       const data=snap.val()||{};
-      setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",...(data[i]||{})})));
+      setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",location:"",...(data[i]||{})})));
     });
-    return()=>{clearInterval(clk);boardRef.off();locRef.off();vRef.off();fcRef.off();};
+    return()=>{ clearInterval(clk); db.ref("board").off(); db.ref("locations").off(); db.ref("vehicles").off(); db.ref("fuelcards").off(); };
   },[]);
 
-  const writeField = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
+  const wf = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
   const writeLocs = l => db.ref("locations").set(l);
-  const writeAllRows = (newRows) => {
-    const updates={};
-    newRows.forEach((r,i)=>{ updates[i]={...r,id:i+1}; });
-    db.ref("board").set(updates);
-  };
-  const writeVehicle = (i,field,value) => { const u={}; u[field]=value; db.ref("vehicles/"+i).update(u); };
-  const writeFuelCard = (i,field,value) => { const u={}; u[field]=value; db.ref("fuelcards/"+i).update(u); };
-
+  const writeVehicle = (i,f,v) => { const u={}; u[f]=v; db.ref("vehicles/"+i).update(u); };
+  const writeFuelCard = (i,f,v) => { const u={}; u[f]=v; db.ref("fuelcards/"+i).update(u); };
+  const writeAllRows = newRows => { const u={}; newRows.forEach((r,i)=>{u[i]={...r,id:i+1};}); db.ref("board").set(u); };
 
   const updateRow = (i,field,val) => {
     setRows(prev=>{ const n=[...prev]; n[i]={...n[i],[field]:val}; if(field==="status"&&val==="IN"){n[i].dueBack="";n[i].dueDate="";} return n; });
-    writeField(i,field,val);
-    if(field==="status"&&val==="IN"){writeField(i,"dueBack","");writeField(i,"dueDate","");}
+    wf(i,field,val);
+    if(field==="status"&&val==="IN"){wf(i,"dueBack","");wf(i,"dueDate","");}
   };
 
   const addLoc = () => {
+    if(!locsUnlocked)return;
     const v=newLoc.trim().toUpperCase();
     if(!v||locs.includes(v))return;
     const next=[...locs,v]; setLocs(next); writeLocs(next); setNewLoc("");
   };
   const removeLoc = loc => {
+    if(!locsUnlocked)return;
     const next=locs.filter(l=>l!==loc); setLocs(next); writeLocs(next);
-    rowsRef.current.forEach((r,i)=>{ if(r.location===loc)writeField(i,"location",""); });
+    rowsRef.current.forEach((r,i)=>{ if(r.location===loc)wf(i,"location",""); });
   };
 
   const locColorMap = {};
@@ -233,198 +212,111 @@ function App(){
   const odRows = rows.filter(r=>r.name&&isOvd(r));
 
   const f = { mono:"'Share Tech Mono',monospace", sans:"'Barlow Condensed',sans-serif" };
-
   const s = {
     wrap:{background:"#080a0d",minHeight:"100vh",color:"#d4dde8",fontFamily:f.mono,fontSize:"13px"},
     header:{background:"#0d1117",borderBottom:"2px solid #c9a84c",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"12px"},
     title:{fontFamily:f.sans,fontWeight:"900",fontSize:"26px",letterSpacing:"5px",color:"#fff",textTransform:"uppercase"},
     gold:{color:"#c9a84c"},
     sub:{fontSize:"9px",color:"#5a6a7a",letterSpacing:"3px",marginTop:"3px",textTransform:"uppercase"},
-    clockWrap:{textAlign:"right"},
-    bhrClock:{fontFamily:f.sans,fontSize:"38px",fontWeight:"900",color:"#c9a84c",letterSpacing:"3px",lineHeight:"1"},
-    bhrLbl:{fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",marginTop:"2px"},
-    zuluClock:{fontSize:"11px",color:"#5a6a7a",letterSpacing:"2px",marginTop:"4px"},
-    filled:{color:"#c9a84c",fontSize:"11px",letterSpacing:"2px",marginTop:"4px"},
+    cw:{textAlign:"right"},
+    bhrC:{fontFamily:f.sans,fontSize:"38px",fontWeight:"900",color:"#c9a84c",letterSpacing:"3px",lineHeight:"1"},
+    bhrL:{fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",marginTop:"2px"},
+    zulC:{fontSize:"11px",color:"#5a6a7a",letterSpacing:"2px",marginTop:"4px"},
+    fill:{color:"#c9a84c",fontSize:"11px",letterSpacing:"2px",marginTop:"4px"},
     tabs:{display:"flex",borderBottom:"1px solid #1e2630",background:"#0a0c0f",flexWrap:"wrap"},
     tab:a=>({background:a?"#0f1318":"transparent",border:"none",borderBottom:a?"2px solid #c9a84c":"2px solid transparent",color:a?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",letterSpacing:"2px",padding:"11px 20px",cursor:"pointer",textTransform:"uppercase",marginBottom:"-1px"}),
     body:{padding:"14px 20px"},
-    srow:{display:"flex",gap:"8px",marginBottom:"10px",flexWrap:"wrap"},
-    sc:c=>({background:"#0f1318",border:`1px solid ${c}33`,padding:"7px 12px",display:"flex",alignItems:"center",gap:"7px"}),
+    sr:{display:"flex",gap:"8px",marginBottom:"10px",flexWrap:"wrap"},
+    sc:c=>({background:"#0f1318",border:"1px solid "+c+"33",padding:"7px 12px",display:"flex",alignItems:"center",gap:"7px"}),
     sn:c=>({fontSize:"20px",fontWeight:"bold",color:c,fontFamily:f.mono}),
     sl:{fontSize:"9px",color:"#5a6a7a",letterSpacing:"1px",textTransform:"uppercase"},
     alert:{background:"rgba(231,76,60,0.1)",border:"1px solid #e74c3c",borderLeft:"4px solid #e74c3c",padding:"10px 16px",marginBottom:"12px",animation:"alertpulse 1.5s infinite"},
-    alertTitle:{color:"#e74c3c",fontSize:"10px",letterSpacing:"3px",marginBottom:"8px"},
-    alertTag:{display:"inline-block",background:"rgba(231,76,60,0.2)",border:"1px solid rgba(231,76,60,0.5)",color:"#ff8a80",padding:"3px 8px",fontSize:"11px",marginRight:"6px",marginBottom:"4px"},
+    aTitle:{color:"#e74c3c",fontSize:"10px",letterSpacing:"3px",marginBottom:"8px"},
+    aTag:{display:"inline-block",background:"rgba(231,76,60,0.2)",border:"1px solid rgba(231,76,60,0.5)",color:"#ff8a80",padding:"3px 8px",fontSize:"11px",marginRight:"6px",marginBottom:"4px"},
     tw:{background:"#0f1318",border:"1px solid #1e2630",overflowX:"auto"},
     th:{background:"#0d1117",borderBottom:"1px solid #7a6330",color:"#c9a84c",fontSize:"9px",letterSpacing:"3px",padding:"10px 12px",textAlign:"left",fontWeight:"normal",whiteSpace:"nowrap",textTransform:"uppercase"},
     td:{padding:"8px 12px",verticalAlign:"middle"},
     inp:{background:"transparent",border:"none",borderBottom:"1px solid #1e2630",color:"#fff",fontFamily:f.mono,fontSize:"12px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"110px",textTransform:"uppercase"},
-    sel:(val,map)=>({appearance:"none",WebkitAppearance:"none",background:map[val]?.bg||"#0a0c0f",border:`1px solid ${map[val]?.color||"#1e2630"}55`,color:map[val]?.color||"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}),
-    tBtn:dis=>({background:dis?"transparent":"#080a0d",border:`1px solid ${dis?"#1e2630":"#c9a84c55"}`,color:dis?"#2a3440":"#c9a84c",fontFamily:f.mono,fontSize:"11px",padding:"4px 7px",cursor:dis?"not-allowed":"pointer",letterSpacing:"1px",minWidth:"100px",textAlign:"center",lineHeight:"1.4"}),
-    notesInp:{background:"transparent",border:"none",borderBottom:"1px solid transparent",color:"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"100px"},
+    sel:(val,map)=>({appearance:"none",WebkitAppearance:"none",background:map[val]?map[val].bg||"#0a0c0f":"#0a0c0f",border:"1px solid "+(map[val]?map[val].color||"#1e2630":"#1e2630")+"55",color:map[val]?map[val].color||"#5a6a7a":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}),
+    tBtn:dis=>({background:dis?"transparent":"#080a0d",border:"1px solid "+(dis?"#1e2630":"#c9a84c55"),color:dis?"#2a3440":"#c9a84c",fontFamily:f.mono,fontSize:"11px",padding:"4px 7px",cursor:dis?"not-allowed":"pointer",letterSpacing:"1px",minWidth:"100px",textAlign:"center",lineHeight:"1.4"}),
+    ni2:{background:"transparent",border:"none",borderBottom:"1px solid transparent",color:"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"100px"},
     badge:{background:"#e74c3c",color:"#fff",fontSize:"8px",padding:"1px 5px",marginLeft:"4px",letterSpacing:"1px",verticalAlign:"middle"},
-    odTime:{color:"#e74c3c",fontSize:"10px",marginLeft:"4px"},
+    odT:{color:"#e74c3c",fontSize:"10px",marginLeft:"4px"},
     footer:{marginTop:"16px",paddingTop:"10px",borderTop:"1px solid #1e2630",fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:"4px"},
     addRow:{display:"flex",gap:"8px",marginBottom:"6px"},
     addInp:{flex:"1",background:"#0f1318",border:"1px solid #1e2630",color:"#fff",fontFamily:f.mono,fontSize:"13px",padding:"9px 12px",outline:"none",textTransform:"uppercase"},
     addBtn:{background:"rgba(201,168,76,0.1)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:f.mono,fontSize:"12px",letterSpacing:"2px",padding:"9px 16px",cursor:"pointer"},
     locGrid:{display:"flex",flexWrap:"wrap",gap:"8px",marginTop:"16px"},
-    locChip:c=>({background:c+"14",border:`1px solid ${c}44`,color:c,fontFamily:f.mono,fontSize:"12px",letterSpacing:"1px",padding:"7px 12px",display:"flex",alignItems:"center",gap:"8px"}),
+    locChip:c=>({background:c+"14",border:"1px solid "+c+"44",color:c,fontFamily:f.mono,fontSize:"12px",letterSpacing:"1px",padding:"7px 12px",display:"flex",alignItems:"center",gap:"8px"}),
     rmBtn:{background:"transparent",border:"none",color:"#e74c3c",cursor:"pointer",fontSize:"14px",padding:"0",lineHeight:"1"},
-    connecting:{textAlign:"center",padding:"60px 20px",color:"#5a6a7a",fontSize:"12px",letterSpacing:"3px",fontFamily:f.mono},
     hint:{marginBottom:"16px",fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"},
-    secTitle:{margin:"18px 0 10px",fontSize:"10px",color:"#c9a84c",letterSpacing:"3px"},
-    warnBox:{marginTop:"16px",background:"rgba(231,76,60,0.06)",border:"1px solid rgba(231,76,60,0.2)",padding:"10px 14px",fontSize:"11px",color:"#8a9aaa"},
-    dragHandle:{color:"#2a3440",cursor:"grab",fontSize:"16px",padding:"0 4px",userSelect:"none",WebkitUserSelect:"none",touchAction:"none"},
-    dragOver:{background:"rgba(201,168,76,0.08)",outline:"1px solid #c9a84c44"},
+    secT:{margin:"18px 0 10px",fontSize:"10px",color:"#c9a84c",letterSpacing:"3px"},
+    warn:{marginTop:"16px",background:"rgba(231,76,60,0.06)",border:"1px solid rgba(231,76,60,0.2)",padding:"10px 14px",fontSize:"11px",color:"#8a9aaa"},
+    dh:{color:"#2a3440",cursor:"grab",fontSize:"16px",padding:"0 4px",userSelect:"none",WebkitUserSelect:"none"},
+    conn:{textAlign:"center",padding:"60px 20px",color:"#5a6a7a",fontSize:"12px",letterSpacing:"3px"},
   };
 
-  const SDEFS=[
-    {key:"IN",label:"In Loc",color:"#2ecc71"},
-    {key:"OUT",label:"Out",color:"#e74c3c"},
-    {key:"R&R",label:"R&R",color:"#3498db"},
-    {key:"MEDICAL",label:"Medical",color:"#f39c12"},
-    {key:"TASKING",label:"Tasking",color:"#9b59b6"},
-    {key:"TOTAL",label:"Total",color:"#c9a84c"},
-    {key:"OVERDUE",label:"Overdue",color:"#e74c3c"},
-  ];
+  const SDEFS=[{key:"IN",label:"In Loc",color:"#2ecc71"},{key:"OUT",label:"Out",color:"#e74c3c"},{key:"R&R",label:"R&R",color:"#3498db"},{key:"MEDICAL",label:"Medical",color:"#f39c12"},{key:"TASKING",label:"Tasking",color:"#9b59b6"},{key:"TOTAL",label:"Total",color:"#c9a84c"},{key:"OVERDUE",label:"Overdue",color:"#e74c3c"}];
+
+  const switchToWH = () => {
+    document.getElementById("root").style.display="none";
+    document.getElementById("wh-root").style.display="block";
+    if(window.renderWH) window.renderWH();
+  };
 
   if(!connected) return (
     <div style={s.wrap}>
       <div style={s.header}>
         <div><div style={s.title}>MOVING <span style={s.gold}>&</span> TRACKING</div><div style={s.sub}>BDL Status Board // Live Personnel Tracking</div></div>
-        <div style={s.clockWrap}><div style={s.bhrClock}>{bhr}</div><div style={s.bhrLbl}>BAHRAIN LOCAL</div><div style={s.zuluClock}>ZULU: {zulu}</div></div>
+        <div style={s.cw}><div style={s.bhrC}>{bhr}</div><div style={s.bhrL}>BAHRAIN LOCAL</div><div style={s.zulC}>ZULU: {zulu}</div></div>
       </div>
-      <div style={s.connecting}>
-        <div style={{width:"30px",height:"30px",border:"2px solid #1e2630",borderTopColor:"#c9a84c",borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 16px"}}/>
-        CONNECTING TO DATABASE...
-      </div>
+      <div style={s.conn}><div style={{width:"30px",height:"30px",border:"2px solid #1e2630",borderTopColor:"#c9a84c",borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 16px"}}/>CONNECTING TO DATABASE...</div>
     </div>
   );
 
   return (
     <div style={s.wrap}>
       <div style={s.header}>
-        <div>
-          <div style={s.title}>MOVING <span style={s.gold}>&</span> TRACKING</div>
-          <div style={s.sub}>BDL Status Board // Live Personnel Tracking</div>
-        </div>
-        <div style={s.clockWrap}>
-          <div style={s.bhrClock}>{bhr}</div>
-          <div style={s.bhrLbl}>BAHRAIN LOCAL</div>
-          <div style={s.zuluClock}>ZULU: {zulu}</div>
-          <div style={s.filled}>{filled}/100 FILLED{odCount>0&&<span style={{color:"#e74c3c",marginLeft:"8px"}}>⚠ {odCount} OVERDUE</span>}</div>
+        <div><div style={s.title}>MOVING <span style={s.gold}>&</span> TRACKING</div><div style={s.sub}>BDL Status Board // Live Personnel Tracking</div></div>
+        <div style={s.cw}>
+          <div style={s.bhrC}>{bhr}</div><div style={s.bhrL}>BAHRAIN LOCAL</div><div style={s.zulC}>ZULU: {zulu}</div>
+          <div style={s.fill}>{filled}/100 FILLED{odCount>0&&<span style={{color:"#e74c3c",marginLeft:"8px"}}>⚠ {odCount} OVERDUE</span>}</div>
         </div>
       </div>
 
       <div style={s.tabs}>
         <button style={s.tab(tab==="board")} onClick={()=>setTab("board")}>Board</button>
-        <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>Locations ({locs.length})</button>
+        <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>Locations</button>
         <button style={s.tab(tab==="vehicles")} onClick={()=>setTab("vehicles")}>Vehicles</button>
         <button style={s.tab(tab==="fuelcards")} onClick={()=>setTab("fuelcards")}>Fuel Cards</button>
-        <button style={s.tab(tab==="wh")} onClick={()=>setTab("wh")}>WH Shifts</button>
+        <button style={s.tab(false)} onClick={switchToWH}>WH Shifts</button>
       </div>
 
       <div style={s.body}>
 
-        {/* ── BOARD TAB ── */}
         {tab==="board"&&<>
-          <div style={s.srow}>
-            {SDEFS.map(({key,label,color})=>{
-              const n=key==="TOTAL"?filled:key==="OVERDUE"?odCount:(sCounts[key]||0);
-              return <div key={key} style={s.sc(color)}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:n>0?color:"#2a3440",flexShrink:0,boxShadow:key==="OVERDUE"&&n>0?`0 0 6px ${color}`:undefined}}/>
-                <div><div style={s.sn(n>0?color:"#fff")}>{n}</div><div style={s.sl}>{label}</div></div>
-              </div>;
-            })}
-          </div>
-          <div style={{...s.srow,marginBottom:"14px"}}>
-            {locs.map((l,i)=>{
-              const c=PAL[i%PAL.length],n=lCounts[l]||0;
-              return <div key={l} style={s.sc(c)}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:n>0?c:"#2a3440",flexShrink:0}}/>
-                <div><div style={s.sn(n>0?c:"#fff")}>{n}</div><div style={s.sl}>{l}</div></div>
-              </div>;
-            })}
-          </div>
-          {odRows.length>0&&<div style={s.alert}>
-            <div style={s.alertTitle}>⚠ OVERDUE PERSONNEL DETECTED</div>
-            <div>{odRows.map((r,i)=><span key={i} style={s.alertTag}>{r.name} — {ovdStr(r)}</span>)}</div>
-          </div>}
+          <div style={s.sr}>{SDEFS.map(({key,label,color})=>{const n=key==="TOTAL"?filled:key==="OVERDUE"?odCount:(sCounts[key]||0);return <div key={key} style={s.sc(color)}><div style={{width:7,height:7,borderRadius:"50%",background:n>0?color:"#2a3440",flexShrink:0,boxShadow:key==="OVERDUE"&&n>0?"0 0 6px "+color:undefined}}/><div><div style={s.sn(n>0?color:"#fff")}>{n}</div><div style={s.sl}>{label}</div></div></div>;})} </div>
+          <div style={{...s.sr,marginBottom:"14px"}}>{locs.map((l,i)=>{const c=PAL[i%PAL.length],n=lCounts[l]||0;return <div key={l} style={s.sc(c)}><div style={{width:7,height:7,borderRadius:"50%",background:n>0?c:"#2a3440",flexShrink:0}}/><div><div style={s.sn(n>0?c:"#fff")}>{n}</div><div style={s.sl}>{l}</div></div></div>;})} </div>
+          {odRows.length>0&&<div style={s.alert}><div style={s.aTitle}>⚠ OVERDUE PERSONNEL DETECTED</div><div>{odRows.map((r,i)=><span key={i} style={s.aTag}>{r.name} — {ovdStr(r)}</span>)}</div></div>}
           <div style={s.tw}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead><tr><th style={s.th}></th>{["#","Name","Location","Status","Due Back (BHR)","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.map((r,i)=>{
-                  const od=isOvd(r);
-                  const dis=r.status==="IN"||r.status==="";
-                  const dueLabel = r.dueBack ? (r.dueDate ? r.dueDate+" "+r.dueBack : r.dueBack) : "— : —";
-                  const isDragOver = dragOver===i;
-                  return <tr key={i}
-                    data-idx={i}
-                    draggable
-                    onDragStart={()=>setDragSrc(i)}
-                    onDragOver={e=>{e.preventDefault();setDragOver(i);}}
-                    onDragLeave={()=>setDragOver(null)}
-                    onDrop={e=>{
-                      e.preventDefault();
-                      if(dragSrc===null||dragSrc===i){setDragSrc(null);setDragOver(null);return;}
-                      const newRows=[...rowsRef.current];
-                      const [moved]=newRows.splice(dragSrc,1);
-                      newRows.splice(i,0,moved);
-                      setRows(newRows);
-                      writeAllRows(newRows);
-                      setDragSrc(null);setDragOver(null);
-                    }}
-                    style={{background:isDragOver?"rgba(201,168,76,0.06)":od?"rgba(231,76,60,0.07)":"transparent",borderBottom:isDragOver?"1px solid #c9a84c44":"1px solid rgba(30,38,48,0.7)",animation:od&&!isDragOver?"rp 2s infinite":undefined,outline:isDragOver?"1px solid #c9a84c33":"none",opacity:dragSrc===i?0.4:1}}>
-                    <td style={{...s.td,width:"20px",padding:"8px 4px"}}>
-                      <span
-                        style={s.dragHandle}
-                        title="Drag to reorder"
-                        onTouchStart={e=>{setDragSrc(i);e.currentTarget.closest('tr').setAttribute('data-touch-drag','1');}}
-                        onTouchMove={e=>{
-                          const touch=e.touches[0];
-                          const el=document.elementFromPoint(touch.clientX,touch.clientY);
-                          const tr=el&&el.closest('tr');
-                          if(tr&&tr.dataset.idx){setDragOver(parseInt(tr.dataset.idx));}
-                        }}
-                        onTouchEnd={()=>{
-                          if(dragSrc!==null&&dragOver!==null&&dragSrc!==dragOver){
-                            const newRows=[...rowsRef.current];
-                            const [moved]=newRows.splice(dragSrc,1);
-                            newRows.splice(dragOver,0,moved);
-                            setRows(newRows);
-                            writeAllRows(newRows);
-                          }
-                          setDragSrc(null);setDragOver(null);
-                        }}
-                      >⠿</span>
-                    </td>
+                  const od=isOvd(r),dis=r.status==="IN"||r.status==="";
+                  const dl=r.dueBack?(r.dueDate?r.dueDate+" "+r.dueBack:r.dueBack):"— : —";
+                  const isDO=dragOver===i;
+                  return <tr key={i} data-idx={i} draggable
+                    onDragStart={()=>setDragSrc(i)} onDragOver={e=>{e.preventDefault();setDragOver(i);}} onDragLeave={()=>setDragOver(null)}
+                    onDrop={e=>{e.preventDefault();if(dragSrc===null||dragSrc===i){setDragSrc(null);setDragOver(null);return;}const nr=[...rowsRef.current];const[mv]=nr.splice(dragSrc,1);nr.splice(i,0,mv);setRows(nr);writeAllRows(nr);setDragSrc(null);setDragOver(null);}}
+                    style={{background:isDO?"rgba(201,168,76,0.06)":od?"rgba(231,76,60,0.07)":"transparent",borderBottom:isDO?"1px solid #c9a84c44":"1px solid rgba(30,38,48,0.7)",opacity:dragSrc===i?0.4:1}}>
+                    <td style={{...s.td,width:"20px",padding:"8px 4px"}}><span style={s.dh} onTouchStart={()=>setDragSrc(i)} onTouchEnd={()=>{if(dragSrc!==null&&dragOver!==null&&dragSrc!==dragOver){const nr=[...rowsRef.current];const[mv]=nr.splice(dragSrc,1);nr.splice(dragOver,0,mv);setRows(nr);writeAllRows(nr);}setDragSrc(null);setDragOver(null);}}>⠿</span></td>
                     <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
-                    <td style={{...s.td,minWidth:"130px"}}>
-                      <input style={s.inp} value={r.name} placeholder="—" onChange={e=>updateRow(i,"name",e.target.value.toUpperCase())} maxLength={25}/>
-                      {od&&<><span style={s.badge}>OVRD</span><span style={s.odTime}>{ovdStr(r)}</span></>}
-                    </td>
-                    <td style={{...s.td,minWidth:"110px"}}>
-                      <select style={s.sel(r.location,locColorMap)} value={r.location} onChange={e=>updateRow(i,"location",e.target.value)}>
-                        <option value="">—</option>
-                        {locs.map(l=><option key={l} value={l}>{l}</option>)}
-                      </select>
-                    </td>
-                    <td style={{...s.td,minWidth:"100px"}}>
-                      <select style={s.sel(r.status,SCOL)} value={r.status} onChange={e=>updateRow(i,"status",e.target.value)}>
-                        <option value="">—</option>
-                        {STATUSES.map(st=><option key={st} value={st}>{st}</option>)}
-                      </select>
-                    </td>
-                    <td style={s.td}>
-                      <button style={s.tBtn(dis)} onClick={()=>!dis&&setPicker({idx:i,time:r.dueBack||"00:00",date:r.dueDate||""})}>
-                        {dueLabel}
-                      </button>
-                    </td>
-                    <td style={{...s.td,minWidth:"110px"}}>
-                      <input style={s.notesInp} value={r.notes} placeholder="—" onChange={e=>updateRow(i,"notes",e.target.value)} maxLength={80}/>
-                    </td>
+                    <td style={{...s.td,minWidth:"130px"}}><input style={s.inp} value={r.name} placeholder="—" onChange={e=>updateRow(i,"name",e.target.value.toUpperCase())} maxLength={25}/>{od&&<><span style={s.badge}>OVRD</span><span style={s.odT}>{ovdStr(r)}</span></>}</td>
+                    <td style={{...s.td,minWidth:"110px"}}><select style={s.sel(r.location,locColorMap)} value={r.location} onChange={e=>updateRow(i,"location",e.target.value)}><option value="">—</option>{locs.map(l=><option key={l} value={l}>{l}</option>)}</select></td>
+                    <td style={{...s.td,minWidth:"100px"}}><select style={s.sel(r.status,SCOL)} value={r.status} onChange={e=>updateRow(i,"status",e.target.value)}><option value="">—</option>{STATUSES.map(st=><option key={st} value={st}>{st}</option>)}</select></td>
+                    <td style={s.td}><button style={s.tBtn(dis)} onClick={()=>!dis&&setPicker({idx:i,time:r.dueBack||"00:00",date:r.dueDate||""})}>{dl}</button></td>
+                    <td style={{...s.td,minWidth:"110px"}}><input style={s.ni2} value={r.notes} placeholder="—" onChange={e=>updateRow(i,"notes",e.target.value)} maxLength={80}/></td>
                   </tr>;
                 })}
               </tbody>
@@ -433,419 +325,214 @@ function App(){
           <div style={s.footer}><span style={{color:"#2ecc71"}}>⬤ LIVE</span><span>BAHRAIN TIME // 100 SLOTS</span></div>
         </>}
 
-        {/* ── LOCATIONS TAB ── */}
         {tab==="locs"&&<>
-          <div style={s.hint}>ADD OR REMOVE LOCATIONS — CHANGES SYNC INSTANTLY FOR EVERYONE</div>
-          <div style={s.addRow}>
-            <input style={s.addInp} value={newLoc} placeholder="TYPE NEW LOCATION..." onChange={e=>setNewLoc(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addLoc()} maxLength={20}/>
-            <button style={s.addBtn} onClick={addLoc}>+ ADD</button>
+          <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px",flexWrap:"wrap"}}>
+            <span style={{fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"}}>LOCATIONS — {locsUnlocked?"🔓 UNLOCKED":"🔒 READ ONLY"}</span>
+            {locsUnlocked&&<button onClick={()=>setLocsUnlocked(false)} style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",color:"#e74c3c",fontFamily:f.mono,fontSize:"10px",letterSpacing:"2px",padding:"5px 10px",cursor:"pointer"}}>LOCK</button>}
           </div>
-          <div style={{fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px"}}>Press ADD or hit Enter.</div>
-          <div style={s.secTitle}>CURRENT LOCATIONS ({locs.length})</div>
-          <div style={s.locGrid}>
-            {locs.map((l,i)=>{const c=PAL[i%PAL.length];return(
-              <div key={l} style={s.locChip(c)}>
-                <div style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>{l}
-                <button style={s.rmBtn} onClick={()=>removeLoc(l)}>✕</button>
-              </div>
-            );})}
-          </div>
-          <div style={s.warnBox}>⚠ Removing a location clears it from any personnel currently assigned to it.</div>
+          {!locsUnlocked&&<PinPad onUnlock={()=>setLocsUnlocked(true)} title="ENTER PIN TO EDIT LOCATIONS"/>}
+          {locsUnlocked&&<>
+            <div style={s.addRow}>
+              <input style={s.addInp} value={newLoc} placeholder="TYPE NEW LOCATION..." onChange={e=>setNewLoc(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addLoc()} maxLength={20}/>
+              <button style={s.addBtn} onClick={addLoc}>+ ADD</button>
+            </div>
+            <div style={{fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px"}}>Press ADD or hit Enter.</div>
+          </>}
+          <div style={s.secT}>CURRENT LOCATIONS ({locs.length})</div>
+          <div style={s.locGrid}>{locs.map((l,i)=>{const c=PAL[i%PAL.length];return(<div key={l} style={s.locChip(c)}><div style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>{l}{locsUnlocked&&<button style={s.rmBtn} onClick={()=>removeLoc(l)}>✕</button>}</div>);})}</div>
+          <div style={s.warn}>⚠ Removing a location clears it from any personnel currently assigned to it.</div>
         </>}
 
-        {/* ── VEHICLES TAB ── */}
         {tab==="vehicles"&&<>
-          <div style={s.hint}>VEHICLE REGISTER — 100 SLOTS // ALL CHANGES SYNC INSTANTLY</div>
-          <div style={s.tw}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr>{["#","Make","Model","Colour","VRN","Name / User"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
-              <tbody>
-                {vehicles.map((v,i)=>(
-                  <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
-                    <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
-                    {["make","model","colour","vrn"].map(field=>(
-                      <td key={field} style={{...s.td,minWidth:"100px"}}>
-                        <input
-                          style={{...s.inp,textTransform:field==="vrn"?"uppercase":"none",letterSpacing:field==="vrn"?"2px":"normal"}}
-                          value={v[field]||""}
-                          placeholder="—"
-                          maxLength={30}
-                          onChange={e=>{
-                            const val=field==="vrn"?e.target.value.toUpperCase():e.target.value;
-                            e.target.value=val;
-                            setVehicles(prev=>{const n=[...prev];n[i]={...n[i],[field]:val};return n;});
-                            writeVehicle(i,field,val);
-                          }}
-                        />
-                      </td>
-                    ))}
-                    <td style={{...s.td,minWidth:"130px"}}>
-                      <select
-                        value={v.name||""}
-                        onChange={e=>{const val=e.target.value;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],name:val};return n;});writeVehicle(i,"name",val);}}
-                        style={{appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:v.name?"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}
-                      >
-                        <option value="">— SELECT —</option>
-                        {rows.filter(r=>r.name).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
-                      </select>
-                    </td>
-                  </tr>
+          <div style={s.hint}>VEHICLE REGISTER — 100 SLOTS</div>
+          <div style={s.tw}><table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>{["#","Make","Model","Colour","VRN","Name / User","Location"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+            <tbody>{vehicles.map((v,i)=>(
+              <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
+                <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
+                {["make","model","colour","vrn"].map(field=>(
+                  <td key={field} style={{...s.td,minWidth:"100px"}}>
+                    <input style={{...s.inp,textTransform:field==="vrn"?"uppercase":"none",letterSpacing:field==="vrn"?"2px":"normal"}} value={v[field]||""} placeholder="—" maxLength={30}
+                      onChange={e=>{const val=field==="vrn"?e.target.value.toUpperCase():e.target.value;e.target.value=val;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],[field]:val};return n;});writeVehicle(i,field,val);}}/>
+                  </td>
                 ))}
-              </tbody>
-            </table>
-          </div>
+                <td style={{...s.td,minWidth:"130px"}}>
+                  <select value={v.name||""} onChange={e=>{const val=e.target.value;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],name:val};return n;});writeVehicle(i,"name",val);}} style={{appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:v.name?"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}>
+                    <option value="">— SELECT —</option>
+                    {rows.filter(r=>r.name).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
+                  </select>
+                </td>
+                <td style={{...s.td,minWidth:"120px"}}>
+                  <select value={v.location||""} onChange={e=>{const val=e.target.value;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],location:val};return n;});writeVehicle(i,"location",val);}} style={{appearance:"none",WebkitAppearance:"none",background:v.location?locColorMap[v.location]?locColorMap[v.location].bg:"#080a0d":"#080a0d",border:"1px solid "+(v.location?locColorMap[v.location]?locColorMap[v.location].color+"55":"#1e2630":"#1e2630"),color:v.location?locColorMap[v.location]?locColorMap[v.location].color:"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}>
+                    <option value="">— SELECT —</option>
+                    {locs.map(l=><option key={l} value={l}>{l}</option>)}
+                  </select>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table></div>
         </>}
 
-        {/* ── FUEL CARDS TAB ── */}
         {tab==="fuelcards"&&<>
-          <div style={s.hint}>FUEL CARD REGISTER — 30 SLOTS // ALL CHANGES SYNC INSTANTLY</div>
-          <div style={s.tw}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr>{["#","Fuel Card Number","Name / Holder","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
-              <tbody>
-                {fuelCards.map((fc,i)=>(
-                  <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
-                    <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
-                    <td style={{...s.td,minWidth:"180px"}}>
-                      <input
-                        style={{...s.inp,letterSpacing:"2px"}}
-                        value={fc.cardnum||""}
-                        placeholder="CARD NUMBER"
-                        maxLength={30}
-                        onChange={e=>{
-                          const val=e.target.value;
-                          setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],cardnum:val};return n;});
-                          writeFuelCard(i,"cardnum",val);
-                        }}
-                      />
-                    </td>
-                    <td style={{...s.td,minWidth:"160px"}}>
-                      <select
-                        value={fc.name||""}
-                        onChange={e=>{const val=e.target.value;setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],name:val};return n;});writeFuelCard(i,"name",val);}}
-                        style={{appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:fc.name?"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}
-                      >
-                        <option value="">— SELECT —</option>
-                        {rows.filter(r=>r.name).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
-                      </select>
-                    </td>
-                    <td style={{...s.td,minWidth:"160px"}}>
-                      <input
-                        style={s.notesInp}
-                        value={fc.notes||""}
-                        placeholder="Notes..."
-                        maxLength={80}
-                        onChange={e=>{const val=e.target.value;setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],notes:val};return n;});writeFuelCard(i,"notes",val);}}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <div style={s.hint}>FUEL CARD REGISTER — 30 SLOTS</div>
+          <div style={s.tw}><table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>{["#","Fuel Card Number","Name / Holder","Notes","Location"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+            <tbody>{fuelCards.map((fc,i)=>(
+              <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
+                <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
+                <td style={{...s.td,minWidth:"160px"}}><input style={{...s.inp,letterSpacing:"2px"}} value={fc.cardnum||""} placeholder="CARD NUMBER" maxLength={30} onChange={e=>{const val=e.target.value;setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],cardnum:val};return n;});writeFuelCard(i,"cardnum",val);}}/></td>
+                <td style={{...s.td,minWidth:"150px"}}>
+                  <select value={fc.name||""} onChange={e=>{const val=e.target.value;setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],name:val};return n;});writeFuelCard(i,"name",val);}} style={{appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid #1e2630",color:fc.name?"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}>
+                    <option value="">— SELECT —</option>
+                    {rows.filter(r=>r.name).map(r=><option key={r.name} value={r.name}>{r.name}</option>)}
+                  </select>
+                </td>
+                <td style={{...s.td,minWidth:"160px"}}><input style={s.ni2} value={fc.notes||""} placeholder="Notes..." maxLength={80} onChange={e=>{const val=e.target.value;setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],notes:val};return n;});writeFuelCard(i,"notes",val);}}/></td>
+                <td style={{...s.td,minWidth:"120px"}}>
+                  <select value={fc.location||""} onChange={e=>{const val=e.target.value;setFuelCards(prev=>{const n=[...prev];n[i]={...n[i],location:val};return n;});writeFuelCard(i,"location",val);}} style={{appearance:"none",WebkitAppearance:"none",background:fc.location?locColorMap[fc.location]?locColorMap[fc.location].bg:"#080a0d":"#080a0d",border:"1px solid "+(fc.location?locColorMap[fc.location]?locColorMap[fc.location].color+"55":"#1e2630":"#1e2630"),color:fc.location?locColorMap[fc.location]?locColorMap[fc.location].color:"#fff":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}>
+                    <option value="">— SELECT —</option>
+                    {locs.map(l=><option key={l} value={l}>{l}</option>)}
+                  </select>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table></div>
         </>}
-
 
       </div>
-
-      {picker&&<TimePicker
-        time={picker.time}
-        date={picker.date}
-        onConfirm={(t,d)=>{updateRow(picker.idx,"dueBack",t);updateRow(picker.idx,"dueDate",d);setPicker(null);}}
-        onClear={()=>{updateRow(picker.idx,"dueBack","");updateRow(picker.idx,"dueDate","");setPicker(null);}}
-        onClose={()=>setPicker(null)}
-      />}
+      {picker&&<TimePicker time={picker.time} date={picker.date} onConfirm={(t,d)=>{updateRow(picker.idx,"dueBack",t);updateRow(picker.idx,"dueDate",d);setPicker(null);}} onClear={()=>{updateRow(picker.idx,"dueBack","");updateRow(picker.idx,"dueDate","");setPicker(null);}} onClose={()=>setPicker(null)}/>}
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
 
+<!-- WH SHIFTS — PURE VANILLA JS, NO REACT -->
 <script>
-// ── WH SHIFTS — VANILLA JS (outside React) ──
 var WH_PIN = "0121";
 var whUnlocked = false;
 var whWeekStart = (function(){
   var n=new Date(new Date().getTime()+3*3600000);
   var day=n.getUTCDay();
-  var diff=(day===6)?0:(day+1)%7;
+  var diff=day===6?0:(day+1)%7;
   return new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()-diff)).getTime();
 })();
-var whData = {};
-var whBoardNames = [];
-var whVehicleList = [];
-var DAYS_WH = ["SAT","SUN","MON","TUE","WED","THU","FRI"];
-var MONTHS_WH = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+var whData={},whBoardNames=[],whVehicleList=[];
+var WDAYS=["SAT","SUN","MON","TUE","WED","THU","FRI"];
+var WMONS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
 function whPad(n){return String(n).padStart(2,"0");}
 
-// Listen to Firebase for WH data, board names, vehicles
-firebase.database().ref("whshifts").on("value",function(s){whData=s.val()||{};});
-firebase.database().ref("board").on("value",function(s){
-  var d=s.val()||{};
-  whBoardNames=Object.values(d).filter(function(r){return r&&r.name;}).map(function(r){return r.name;});
-});
-firebase.database().ref("vehicles").on("value",function(s){
-  var d=s.val()||{};
-  whVehicleList=Object.values(d).filter(function(v){return v&&v.vrn;}).map(function(v){
-    return v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:"");
-  });
-});
+window.db.ref("whshifts").on("value",function(s){whData=s.val()||{};});
+window.db.ref("board").on("value",function(s){var d=s.val()||{};whBoardNames=Object.values(d).filter(function(r){return r&&r.name;}).map(function(r){return r.name;});});
+window.db.ref("vehicles").on("value",function(s){var d=s.val()||{};whVehicleList=Object.values(d).filter(function(v){return v&&v.vrn;}).map(function(v){return v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:"");});});
 
-function whWrite(weekKey,dayKey,field,val){
-  var u={};u[field]=val;
-  firebase.database().ref("whshifts/"+weekKey+"/"+dayKey).update(u);
-}
+function whWrite(wk,dk,field,val){var u={};u[field]=val;window.db.ref("whshifts/"+wk+"/"+dk).update(u);}
+function whDay(dk){return(whData["w"+whWeekStart]||{})[dk]||{};}
 
-function whGetDay(dayKey){
-  var wk="w"+whWeekStart;
-  return (whData[wk]||{})[dayKey]||{};
-}
-
-function makeSelect(fld,dayKey,options,placeholder,isVeh){
-  var d=whGetDay(dayKey);
-  var val=d[fld]||"";
-  var wk="w"+whWeekStart;
+function mkSel(fld,dk,opts,ph,isVeh){
+  var d=whDay(dk),val=d[fld]||"",wk="w"+whWeekStart;
   var sel=document.createElement("select");
   sel.style.cssText="appearance:none;-webkit-appearance:none;background:#080a0d;border:1px solid "+(isVeh?"#c9a84c33":"#1e2630")+";color:"+(val?(isVeh?"#c9a84c":"#fff"):"#5a6a7a")+";font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 7px;outline:none;width:100%;min-width:130px;border-radius:0;cursor:pointer";
-  var opt0=document.createElement("option");opt0.value="";opt0.textContent=placeholder||"— SELECT —";sel.appendChild(opt0);
-  options.forEach(function(o){
-    var op=document.createElement("option");op.value=o;op.textContent=o;if(o===val)op.selected=true;sel.appendChild(op);
-  });
+  var o0=document.createElement("option");o0.value="";o0.textContent=ph||"— SELECT —";sel.appendChild(o0);
+  opts.forEach(function(o){var op=document.createElement("option");op.value=o;op.textContent=o;if(o===val)op.selected=true;sel.appendChild(op);});
   sel.addEventListener("change",function(){
     if(!whUnlocked){sel.value=val;return;}
-    whWrite(wk,dayKey,fld,sel.value);
+    val=sel.value;
+    whWrite(wk,dk,fld,sel.value);
     sel.style.color=sel.value?(isVeh?"#c9a84c":"#fff"):"#5a6a7a";
   });
   return sel;
 }
 
-function makeRow(label,el){
-  var row=document.createElement("div");
-  row.style.cssText="display:flex;gap:8px;margin-bottom:7px;align-items:center;flex-wrap:wrap";
-  var lb=document.createElement("span");
-  lb.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:2px;min-width:75px;flex-shrink:0;font-family:'Share Tech Mono',monospace";
-  lb.textContent=label;
-  row.appendChild(lb);row.appendChild(el);return row;
+function mkRow(lbl,el){
+  var r=document.createElement("div");r.style.cssText="display:flex;gap:8px;margin-bottom:7px;align-items:center;flex-wrap:wrap";
+  var l=document.createElement("span");l.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:2px;min-width:75px;flex-shrink:0;font-family:'Share Tech Mono',monospace";l.textContent=lbl;
+  r.appendChild(l);r.appendChild(el);return r;
 }
-
-function makeSectionTitle(txt){
-  var d=document.createElement("div");
-  d.style.cssText="font-size:9px;color:#c9a84c;letter-spacing:3px;margin:12px 0 7px;font-family:'Share Tech Mono',monospace";
-  d.textContent=txt;return d;
-}
-
-function makePaxRow(prefix,dayKey){
-  var wrap=document.createElement("div");
-  var lbl=document.createElement("div");
-  lbl.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:2px;margin-bottom:6px;font-family:'Share Tech Mono',monospace";
-  lbl.textContent="PAX (UP TO 4)";
-  wrap.appendChild(lbl);
-  var row=document.createElement("div");
-  row.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px";
-  [1,2,3,4].forEach(function(n){
-    row.appendChild(makeSelect(prefix+"Pax"+n,dayKey,whBoardNames,"PAX "+n,false));
-  });
-  wrap.appendChild(row);return wrap;
+function mkHdr(txt){var d=document.createElement("div");d.style.cssText="font-size:9px;color:#c9a84c;letter-spacing:3px;margin:12px 0 7px;font-family:'Share Tech Mono',monospace";d.textContent=txt;return d;}
+function mkPax(prefix,dk){
+  var w=document.createElement("div");
+  var l=document.createElement("div");l.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:2px;margin-bottom:6px;font-family:'Share Tech Mono',monospace";l.textContent="PAX (UP TO 4)";w.appendChild(l);
+  var r=document.createElement("div");r.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px";
+  [1,2,3,4].forEach(function(n){r.appendChild(mkSel(prefix+"Pax"+n,dk,whBoardNames,"PAX "+n,false));});
+  w.appendChild(r);return w;
 }
 
 function buildDayCard(i){
-  var d=new Date(whWeekStart+i*86400000);
-  var label=DAYS_WH[i];
-  var date=d.getUTCDate();
-  var month=MONTHS_WH[d.getUTCMonth()];
-  var dayKey=label.toLowerCase();
-
-  var card=document.createElement("div");
-  card.style.cssText="background:#0f1318;border:1px solid #1e2630;padding:14px 16px;margin-bottom:12px";
-
-  // Day header
-  var hdr=document.createElement("div");
-  hdr.style.cssText="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #1e2630;padding-bottom:10px;margin-bottom:4px";
-  var hl=document.createElement("span");
-  hl.style.cssText="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#c9a84c;letter-spacing:3px";
-  hl.textContent=label;
-  var hd=document.createElement("span");
-  hd.style.cssText="font-family:'Share Tech Mono',monospace;font-size:12px;color:#5a6a7a;letter-spacing:2px";
-  hd.textContent=date+" "+month;
+  var d=new Date(whWeekStart+i*86400000),lbl=WDAYS[i],dt=d.getUTCDate(),mo=WMONS[d.getUTCMonth()],dk=lbl.toLowerCase();
+  var card=document.createElement("div");card.style.cssText="background:#0f1318;border:1px solid #1e2630;padding:14px 16px;margin-bottom:12px";
+  var hdr=document.createElement("div");hdr.style.cssText="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #1e2630;padding-bottom:10px;margin-bottom:4px";
+  var hl=document.createElement("span");hl.style.cssText="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#c9a84c;letter-spacing:3px";hl.textContent=lbl;
+  var hd=document.createElement("span");hd.style.cssText="font-family:'Share Tech Mono',monospace;font-size:12px;color:#5a6a7a;letter-spacing:2px";hd.textContent=dt+" "+mo;
   hdr.appendChild(hl);hdr.appendChild(hd);card.appendChild(hdr);
-
-  // WH Shift
-  card.appendChild(makeSectionTitle("WH SHIFT"));
-  card.appendChild(makeRow("PERSON 1",makeSelect("shift1",dayKey,whBoardNames,"— SELECT —",false)));
-  card.appendChild(makeRow("PERSON 2",makeSelect("shift2",dayKey,whBoardNames,"— SELECT —",false)));
-
-  // Courier
-  card.appendChild(makeSectionTitle("COURIER"));
-  card.appendChild(makeRow("PERSON",makeSelect("courierPerson",dayKey,whBoardNames,"— SELECT —",false)));
-  card.appendChild(makeRow("VEHICLE",makeSelect("courierVeh",dayKey,whVehicleList,"— SELECT VEH —",true)));
-  card.appendChild(makePaxRow("courier",dayKey));
-
-  // Escort
-  card.appendChild(makeSectionTitle("ESCORT"));
-  card.appendChild(makeRow("PERSON",makeSelect("escortPerson",dayKey,whBoardNames,"— SELECT —",false)));
-  card.appendChild(makeRow("VEHICLE",makeSelect("escortVeh",dayKey,whVehicleList,"— SELECT VEH —",true)));
-  card.appendChild(makePaxRow("escort",dayKey));
-
+  card.appendChild(mkHdr("WH SHIFT"));
+  card.appendChild(mkRow("PERSON 1",mkSel("shift1",dk,whBoardNames,"— SELECT —",false)));
+  card.appendChild(mkRow("PERSON 2",mkSel("shift2",dk,whBoardNames,"— SELECT —",false)));
+  card.appendChild(mkHdr("COURIER"));
+  card.appendChild(mkRow("PERSON",mkSel("courierPerson",dk,whBoardNames,"— SELECT —",false)));
+  card.appendChild(mkRow("VEHICLE",mkSel("courierVeh",dk,whVehicleList,"— SELECT VEH —",true)));
+  card.appendChild(mkPax("courier",dk));
+  card.appendChild(mkHdr("ESCORT"));
+  card.appendChild(mkRow("PERSON",mkSel("escortPerson",dk,whBoardNames,"— SELECT —",false)));
+  card.appendChild(mkRow("VEHICLE",mkSel("escortVeh",dk,whVehicleList,"— SELECT VEH —",true)));
+  card.appendChild(mkPax("escort",dk));
   return card;
 }
 
-function buildWeekNav(){
-  var d=new Date(whWeekStart);
-  var startD=new Date(whWeekStart);
-  var endD=new Date(whWeekStart+6*86400000);
-  var nav=document.createElement("div");
-  nav.style.cssText="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap";
-
-  var prev=document.createElement("button");
-  prev.textContent="◀ PREV";
-  prev.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer";
-  prev.onclick=function(){whWeekStart-=7*86400000;window.renderWH();};
-
-  var title=document.createElement("div");
-  title.style.cssText="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;letter-spacing:3px";
-  title.textContent=startD.getUTCDate()+" "+MONTHS_WH[startD.getUTCMonth()]+" — "+endD.getUTCDate()+" "+MONTHS_WH[endD.getUTCMonth()];
-
-  var next=document.createElement("button");
-  next.textContent="NEXT ▶";
-  next.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer";
-  next.onclick=function(){whWeekStart+=7*86400000;window.renderWH();};
-
-  var lockStatus=document.createElement("span");
-  lockStatus.style.cssText="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;margin-left:8px;color:"+(whUnlocked?"#2ecc71":"#e74c3c");
-  lockStatus.textContent=whUnlocked?"🔓 UNLOCKED":"🔒 READ ONLY";
-
-  nav.appendChild(prev);nav.appendChild(title);nav.appendChild(next);nav.appendChild(lockStatus);
-
-  if(whUnlocked){
-    var lockBtn=document.createElement("button");
-    lockBtn.textContent="LOCK";
-    lockBtn.style.cssText="background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);color:#e74c3c;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:5px 10px;cursor:pointer";
-    lockBtn.onclick=function(){whUnlocked=false;window.renderWH();};
-    nav.appendChild(lockBtn);
-  }
-  return nav;
-}
-
-function buildPinPad(){
-  var pin="";
-  var wrap=document.createElement("div");
+function buildPinPad(onSuccess){
+  var pin="",wrap=document.createElement("div");
   wrap.style.cssText="background:#0f1318;border:1px solid #1e2630;padding:20px;margin-bottom:20px;max-width:280px";
-
-  var title=document.createElement("div");
-  title.style.cssText="font-size:10px;color:#c9a84c;letter-spacing:3px;margin-bottom:16px;font-family:'Share Tech Mono',monospace";
-  title.textContent="ENTER PIN TO EDIT";
-
-  var dots=document.createElement("div");
-  dots.style.cssText="display:flex;gap:10px;justify-content:center;margin-bottom:16px";
-  var dotEls=[0,1,2,3].map(function(){
-    var d=document.createElement("div");
-    d.style.cssText="width:40px;height:40px;border:1px solid #1e2630;display:flex;align-items:center;justify-content:center;font-size:24px;color:#c9a84c;font-family:'Share Tech Mono',monospace";
-    dots.appendChild(d);return d;
-  });
-
-  var errEl=document.createElement("div");
-  errEl.style.cssText="color:#e74c3c;font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:10px;font-family:'Share Tech Mono',monospace;display:none";
-  errEl.textContent="INCORRECT PIN";
-
-  var updateDots=function(){dotEls.forEach(function(d,i){d.textContent=i<pin.length?"●":"";d.style.borderColor=i<pin.length?"#c9a84c":"#1e2630";});};
-
-  var grid=document.createElement("div");
-  grid.style.cssText="display:grid;grid-template-columns:repeat(3,70px);gap:8px;justify-content:center";
-
-  var makeBtn=function(label,action){
-    var b=document.createElement("button");
-    b.textContent=label;
-    b.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#d4dde8;font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;width:70px;height:60px;cursor:pointer";
-    b.onclick=action;return b;
-  };
-
-  [1,2,3,4,5,6,7,8,9].forEach(function(n){
-    grid.appendChild(makeBtn(String(n),function(){if(pin.length<4){pin+=String(n);updateDots();};}));
-  });
-
-  var delBtn=makeBtn("⌫",function(){pin=pin.slice(0,-1);updateDots();errEl.style.display="none";});
-  delBtn.style.color="#e74c3c";delBtn.style.borderColor="rgba(231,76,60,0.3)";grid.appendChild(delBtn);
-
-  grid.appendChild(makeBtn("0",function(){if(pin.length<4){pin+="0";updateDots();}}));
-
-  var okBtn=makeBtn("OK",function(){
-    if(pin===WH_PIN){whUnlocked=true;window.renderWH();}
-    else{errEl.style.display="block";pin="";updateDots();}
-  });
-  okBtn.style.background="rgba(201,168,76,0.15)";okBtn.style.borderColor="#c9a84c";okBtn.style.color="#c9a84c";okBtn.style.fontSize="14px";
-  grid.appendChild(okBtn);
-
-  wrap.appendChild(title);wrap.appendChild(dots);wrap.appendChild(errEl);wrap.appendChild(grid);
-  return wrap;
-}
-
-// Build header (matches React header styling)
-function buildWHHeader(){
-  var hdr=document.createElement("div");
-  hdr.style.cssText="background:#0d1117;border-bottom:2px solid #c9a84c;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px";
-
-  var left=document.createElement("div");
-  var title=document.createElement("div");
-  title.style.cssText="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;letter-spacing:5px;color:#fff;text-transform:uppercase";
-  title.innerHTML='MOVING <span style="color:#c9a84c">&</span> TRACKING';
-  var sub=document.createElement("div");
-  sub.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:3px;margin-top:3px;text-transform:uppercase";
-  sub.textContent="BDL Status Board // Live Personnel Tracking";
-  left.appendChild(title);left.appendChild(sub);
-
-  hdr.appendChild(left);
-  return hdr;
-}
-
-function buildWHTabs(){
-  var tabs=document.createElement("div");
-  tabs.style.cssText="display:flex;border-bottom:1px solid #1e2630;background:#0a0c0f;flex-wrap:wrap";
-  var tabNames=[["board","Board"],["locs","Locations"],["vehicles","Vehicles"],["fuelcards","Fuel Cards"],["wh","WH Shifts"]];
-  tabNames.forEach(function(t){
-    var btn=document.createElement("button");
-    btn.textContent=t[1];
-    var isActive=t[0]==="wh";
-    btn.style.cssText="background:"+(isActive?"#0f1318":"transparent")+";border:none;border-bottom:2px solid "+(isActive?"#c9a84c":"transparent")+";color:"+(isActive?"#c9a84c":"#5a6a7a")+";font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:11px 20px;cursor:pointer;text-transform:uppercase;margin-bottom:-1px";
-    btn.onclick=function(){
-      if(t[0]==="wh")return;
-      // Switch back to React
-      document.getElementById("wh-root").style.display="none";
-      document.getElementById("root").style.display="block";
-      // Click the matching React tab
-      var reactBtn=document.getElementById("wh-tab-btn");
-      if(reactBtn){
-        // find sibling buttons
-        var allBtns=reactBtn.parentElement.querySelectorAll("button");
-        allBtns.forEach(function(b){if(b.textContent.toLowerCase().indexOf(t[0].replace("locs","location"))>=0||b.textContent.toLowerCase()===t[1].toLowerCase()||b.textContent.toLowerCase().startsWith(t[1].toLowerCase())){b.click();}});
-      }
-    };
-    tabs.appendChild(btn);
-  });
-  return tabs;
+  var title=document.createElement("div");title.style.cssText="font-size:10px;color:#c9a84c;letter-spacing:3px;margin-bottom:16px;font-family:'Share Tech Mono',monospace";title.textContent="ENTER PIN TO EDIT";
+  var dots=document.createElement("div");dots.style.cssText="display:flex;gap:10px;justify-content:center;margin-bottom:16px";
+  var dotEls=[0,1,2,3].map(function(){var d=document.createElement("div");d.style.cssText="width:40px;height:40px;border:1px solid #1e2630;display:flex;align-items:center;justify-content:center;font-size:24px;color:#c9a84c;font-family:'Share Tech Mono',monospace";dots.appendChild(d);return d;});
+  var err=document.createElement("div");err.style.cssText="color:#e74c3c;font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:10px;font-family:'Share Tech Mono',monospace;display:none";err.textContent="INCORRECT PIN";
+  var upd=function(){dotEls.forEach(function(d,i){d.textContent=i<pin.length?"●":"";d.style.borderColor=i<pin.length?"#c9a84c":"#1e2630";});};
+  var grid=document.createElement("div");grid.style.cssText="display:grid;grid-template-columns:repeat(3,70px);gap:8px;justify-content:center";
+  var mkBtn=function(lbl,fn){var b=document.createElement("button");b.textContent=lbl;b.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#d4dde8;font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;width:70px;height:60px;cursor:pointer";b.onclick=fn;return b;};
+  [1,2,3,4,5,6,7,8,9].forEach(function(n){grid.appendChild(mkBtn(String(n),function(){if(pin.length<4){pin+=String(n);upd();}err.style.display="none";});});
+  var del=mkBtn("⌫",function(){pin=pin.slice(0,-1);upd();err.style.display="none";});del.style.color="#e74c3c";del.style.borderColor="rgba(231,76,60,0.3)";grid.appendChild(del);
+  grid.appendChild(mkBtn("0",function(){if(pin.length<4){pin+="0";upd();}err.style.display="none";}));
+  var ok=mkBtn("OK",function(){if(pin===WH_PIN){onSuccess();}else{err.style.display="block";pin="";upd();}});ok.style.background="rgba(201,168,76,0.15)";ok.style.borderColor="#c9a84c";ok.style.color="#c9a84c";ok.style.fontSize="14px";grid.appendChild(ok);
+  wrap.appendChild(title);wrap.appendChild(dots);wrap.appendChild(err);wrap.appendChild(grid);return wrap;
 }
 
 window.renderWH = function(){
-  var root=document.getElementById("wh-root");
-  root.innerHTML="";
-  root.style.background="#080a0d";
-  root.style.minHeight="100vh";
-
-  root.appendChild(buildWHHeader());
-  root.appendChild(buildWHTabs());
-
-  var body=document.createElement("div");
-  body.style.cssText="padding:14px 20px;max-width:1400px;margin:0 auto";
-
-  body.appendChild(buildWeekNav());
-  if(!whUnlocked) body.appendChild(buildPinPad());
-
+  var root=document.getElementById("wh-root");root.innerHTML="";
+  // Header
+  var hdr=document.createElement("div");hdr.style.cssText="background:#0d1117;border-bottom:2px solid #c9a84c;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px";
+  var hl=document.createElement("div");hl.innerHTML='<div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:26px;letter-spacing:5px;color:#fff;text-transform:uppercase">MOVING <span style="color:#c9a84c">&</span> TRACKING</div><div style="font-size:9px;color:#5a6a7a;letter-spacing:3px;margin-top:3px;text-transform:uppercase">BDL Status Board // Live Personnel Tracking</div>';
+  hdr.appendChild(hl);root.appendChild(hdr);
+  // Tabs
+  var tabs=document.createElement("div");tabs.style.cssText="display:flex;border-bottom:1px solid #1e2630;background:#0a0c0f;flex-wrap:wrap";
+  [["Board","board"],["Locations","locs"],["Vehicles","vehicles"],["Fuel Cards","fuelcards"],["WH Shifts","wh"]].forEach(function(t){
+    var b=document.createElement("button");b.textContent=t[0];
+    var active=t[1]==="wh";
+    b.style.cssText="background:"+(active?"#0f1318":"transparent")+";border:none;border-bottom:2px solid "+(active?"#c9a84c":"transparent")+";color:"+(active?"#c9a84c":"#5a6a7a")+";font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:11px 20px;cursor:pointer;text-transform:uppercase;margin-bottom:-1px";
+    b.onclick=function(){
+      if(t[1]==="wh")return;
+      document.getElementById("wh-root").style.display="none";
+      document.getElementById("root").style.display="block";
+    };
+    tabs.appendChild(b);
+  });
+  root.appendChild(tabs);
+  // Body
+  var body=document.createElement("div");body.style.cssText="padding:14px 20px;max-width:1400px;margin:0 auto";
+  // Week nav
+  var nav=document.createElement("div");nav.style.cssText="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap";
+  var startD=new Date(whWeekStart),endD=new Date(whWeekStart+6*86400000);
+  var prev=document.createElement("button");prev.textContent="◀ PREV";prev.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer";prev.onclick=function(){whWeekStart-=7*86400000;window.renderWH();};
+  var wkTitle=document.createElement("div");wkTitle.style.cssText="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;letter-spacing:3px";wkTitle.textContent=startD.getUTCDate()+" "+WMONS[startD.getUTCMonth()]+" — "+endD.getUTCDate()+" "+WMONS[endD.getUTCMonth()];
+  var next=document.createElement("button");next.textContent="NEXT ▶";next.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer";next.onclick=function(){whWeekStart+=7*86400000;window.renderWH();};
+  var lkStatus=document.createElement("span");lkStatus.style.cssText="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;margin-left:8px;color:"+(whUnlocked?"#2ecc71":"#e74c3c");lkStatus.textContent=whUnlocked?"🔓 UNLOCKED":"🔒 READ ONLY";
+  nav.appendChild(prev);nav.appendChild(wkTitle);nav.appendChild(next);nav.appendChild(lkStatus);
+  if(whUnlocked){var lkBtn=document.createElement("button");lkBtn.textContent="LOCK";lkBtn.style.cssText="background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);color:#e74c3c;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:5px 10px;cursor:pointer";lkBtn.onclick=function(){whUnlocked=false;window.renderWH();};nav.appendChild(lkBtn);}
+  body.appendChild(nav);
+  if(!whUnlocked) body.appendChild(buildPinPad(function(){whUnlocked=true;window.renderWH();}));
   for(var i=0;i<7;i++) body.appendChild(buildDayCard(i));
-
   root.appendChild(body);
 };
 </script>
-
 </body>
 </html>
