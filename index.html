@@ -32,7 +32,8 @@ select{-webkit-appearance:none;appearance:none}
 
 <script type="text/babel">
 const db = window.db;
-const DEFAULT_LOCS = ["WHITEHOUSE","BEB","BDL","OUT"];
+const DEFAULT_LOCS = ["WHITEHOUSE","BEB","RITZ","OUT"];
+const DEFAULT_LOCS2 = []; // separate location list
 const DEFAULT_STATUSES = ["IN","OUT","R&R","MEDICAL","TASKING","TRANSITING"];
 const PAL = ["#c9a84c","#3498db","#2ecc71","#9b59b6","#e74c3c","#e67e22","#1abc9c","#e91e63","#00bcd4","#8bc34a"];
 const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
@@ -140,10 +141,12 @@ function TimePicker({time,date,onConfirm,onClear,onClose}){
 
 // MAIN APP
 function App(){
-  const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:""})));
+  const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",location2:"",status:"",dueBack:"",dueDate:"",notes:""})));
   const [locs,setLocs] = useState(DEFAULT_LOCS);
+  const [locs2,setLocs2] = useState(DEFAULT_LOCS2);
   const [statuses,setStatuses] = useState(DEFAULT_STATUSES);
   const [newStatus,setNewStatus] = useState("");
+  const [newLoc2,setNewLoc2] = useState("");
   const [vehicles,setVehicles] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",location:""})));
   const [fuelCards,setFuelCards] = useState(()=>Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",location:""})));
   const [tab,setTab] = useState("board");
@@ -163,10 +166,11 @@ function App(){
     const clk = setInterval(()=>{setBhr(bhrNow());setZulu(zuluNow());},1000);
     db.ref("board").on("value",snap=>{
       const data=snap.val()||{};
-      setRows(Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:"",...(data[i]||{})})));
+      setRows(Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",location2:"",status:"",dueBack:"",dueDate:"",notes:"",...(data[i]||{})})));
       setConnected(true);
     });
     db.ref("locations").on("value",snap=>{ const v=snap.val(); if(Array.isArray(v)&&v.length>0)setLocs(v); });
+    db.ref("locations2").on("value",snap=>{ const v=snap.val(); if(Array.isArray(v))setLocs2(v); });
     db.ref("statuses").on("value",snap=>{ const v=snap.val(); if(Array.isArray(v)&&v.length>0)setStatuses(v); });
     db.ref("vehicles").on("value",snap=>{
       const data=snap.val()||{};
@@ -176,12 +180,13 @@ function App(){
       const data=snap.val()||{};
       setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",location:"",...(data[i]||{})})));
     });
-    return()=>{ clearInterval(clk); db.ref("board").off(); db.ref("locations").off(); db.ref("statuses").off(); db.ref("vehicles").off(); db.ref("fuelcards").off(); };
+    return()=>{ clearInterval(clk); db.ref("board").off(); db.ref("locations").off(); db.ref("locations2").off(); db.ref("statuses").off(); db.ref("vehicles").off(); db.ref("fuelcards").off(); };
   },[]);
 
   const wf = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
   const writeLocs = l => db.ref("locations").set(l);
   const writeStatuses = s => db.ref("statuses").set(s);
+  const writeLocs2 = l => db.ref("locations2").set(l);
   const writeVehicle = (i,f,v) => { const u={}; u[f]=v; db.ref("vehicles/"+i).update(u); };
   const writeFuelCard = (i,f,v) => { const u={}; u[f]=v; db.ref("fuelcards/"+i).update(u); };
   const writeAllRows = newRows => { const u={}; newRows.forEach((r,i)=>{u[i]={...r,id:i+1};}); db.ref("board").set(u); };
@@ -208,6 +213,17 @@ function App(){
     if(!locsUnlocked)return;
     const next=statuses.filter(s=>s!==st); setStatuses(next); writeStatuses(next);
   };
+  const addLoc2 = () => {
+    if(!locsUnlocked)return;
+    const v=newLoc2.trim().toUpperCase();
+    if(!v||locs2.includes(v))return;
+    const next=[...locs2,v]; setLocs2(next); writeLocs2(next); setNewLoc2("");
+  };
+  const removeLoc2 = loc => {
+    if(!locsUnlocked)return;
+    const next=locs2.filter(l=>l!==loc); setLocs2(next); writeLocs2(next);
+    rowsRef.current.forEach((r,i)=>{ if(r.location2===loc)wf(i,"location2",""); });
+  };
   const removeLoc = loc => {
     if(!locsUnlocked)return;
     const next=locs.filter(l=>l!==loc); setLocs(next); writeLocs(next);
@@ -217,13 +233,17 @@ function App(){
   const locColorMap = {};
   locs.forEach((l,i)=>{ const c=PAL[i%PAL.length]; locColorMap[l]={color:c,bg:c+"22"}; });
   locColorMap[""]={color:"#5a6a7a",bg:"transparent"};
+  const loc2ColorMap = {};
+  locs2.forEach((l,i)=>{ const c=PAL[(i+5)%PAL.length]; loc2ColorMap[l]={color:c,bg:c+"22"}; });
+  loc2ColorMap[""]={color:"#5a6a7a",bg:"transparent"};
 
-  const sCounts={},lCounts={};let filled=0,odCount=0;
+  const sCounts={},lCounts={},l2Counts={};let filled=0,odCount=0;
   rows.forEach(r=>{
     if(r.name)filled++;
     if(isOvd(r))odCount++;
     if(r.status)sCounts[r.status]=(sCounts[r.status]||0)+1;
     if(r.location)lCounts[r.location]=(lCounts[r.location]||0)+1;
+    if(r.location2)l2Counts[r.location2]=(l2Counts[r.location2]||0)+1;
   });
   const odRows = rows.filter(r=>r.name&&isOvd(r));
 
@@ -298,7 +318,7 @@ function App(){
 
       <div style={s.tabs}>
         <button style={s.tab(tab==="board")} onClick={()=>setTab("board")}>Board</button>
-        <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>Locations & Status</button>
+        <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>BDL Status & Locations</button>
         <button style={s.tab(tab==="vehicles")} onClick={()=>setTab("vehicles")}>Vehicles</button>
         <button style={s.tab(tab==="fuelcards")} onClick={()=>setTab("fuelcards")}>Fuel Cards</button>
         <a href="wh.html" style={{...s.tab(false),textDecoration:"none",display:"inline-block"}}>WH Shifts</a>
@@ -308,11 +328,12 @@ function App(){
 
         {tab==="board"&&<>
           <div style={s.sr}>{SDEFS.map(({key,label,color})=>{const n=key==="TOTAL"?filled:key==="OVERDUE"?odCount:(sCounts[key]||0);return <div key={key} style={s.sc(color)}><div style={{width:7,height:7,borderRadius:"50%",background:n>0?color:"#2a3440",flexShrink:0,boxShadow:key==="OVERDUE"&&n>0?"0 0 6px "+color:undefined}}/><div><div style={s.sn(n>0?color:"#fff")}>{n}</div><div style={s.sl}>{label}</div></div></div>;})} </div>
-          <div style={{...s.sr,marginBottom:"14px"}}>{locs.map((l,i)=>{const c=PAL[i%PAL.length],n=lCounts[l]||0;return <div key={l} style={s.sc(c)}><div style={{width:7,height:7,borderRadius:"50%",background:n>0?c:"#2a3440",flexShrink:0}}/><div><div style={s.sn(n>0?c:"#fff")}>{n}</div><div style={s.sl}>{l}</div></div></div>;})} </div>
+          <div style={{...s.sr,marginBottom:"4px"}}>{locs.map((l,i)=>{const c=PAL[i%PAL.length],n=lCounts[l]||0;return <div key={l} style={s.sc(c)}><div style={{width:7,height:7,borderRadius:"50%",background:n>0?c:"#2a3440",flexShrink:0}}/><div><div style={s.sn(n>0?c:"#fff")}>{n}</div><div style={s.sl}>{l}</div></div></div>;})} </div>
+          {locs2.length>0&&<div style={{...s.sr,marginBottom:"14px"}}>{locs2.map((l,i)=>{const c=PAL[(i+5)%PAL.length],n=l2Counts[l]||0;return <div key={l} style={s.sc(c)}><div style={{width:7,height:7,borderRadius:"50%",background:n>0?c:"#2a3440",flexShrink:0}}/><div><div style={s.sn(n>0?c:"#fff")}>{n}</div><div style={s.sl}>{l}</div></div></div>;})} </div>}
           {odRows.length>0&&<div style={s.alert}><div style={s.aTitle}>⚠ OVERDUE PERSONNEL DETECTED</div><div>{odRows.map((r,i)=><span key={i} style={s.aTag}>{r.name} — {ovdStr(r)}</span>)}</div></div>}
           <div style={s.tw}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr><th style={s.th}></th>{["#","Name","Location","Status","Due Back (BHR)","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+              <thead><tr><th style={s.th}></th>{["#","Name","Bed Down Loc","Status","Location","Due Back (BHR)","Notes"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.map((r,i)=>{
                   const od=isOvd(r),dis=r.status==="IN"||r.status==="";
@@ -327,6 +348,12 @@ function App(){
                     <td style={{...s.td,minWidth:"130px"}}><input style={s.inp} value={r.name} placeholder="—" onChange={e=>updateRow(i,"name",e.target.value.toUpperCase())} maxLength={25}/>{od&&<><span style={s.badge}>OVRD</span><span style={s.odT}>{ovdStr(r)}</span></>}</td>
                     <td style={{...s.td,minWidth:"110px"}}><select style={s.sel(r.location,locColorMap)} value={r.location} onChange={e=>updateRow(i,"location",e.target.value)}><option value="">—</option>{locs.map(l=><option key={l} value={l}>{l}</option>)}</select></td>
                     <td style={{...s.td,minWidth:"100px"}}><select style={s.sel(r.status,Object.fromEntries(statuses.map(st=>[st,statusColor(st)]).concat([["",{color:"#5a6a7a",bg:"transparent"}]])))} value={r.status} onChange={e=>updateRow(i,"status",e.target.value)}><option value="">—</option>{statuses.map(st=><option key={st} value={st}>{st}</option>)}</select></td>
+                    <td style={{...s.td,minWidth:"110px"}}>
+                      <select style={s.sel(r.location2,loc2ColorMap)} value={r.location2||""} onChange={e=>updateRow(i,"location2",e.target.value)}>
+                        <option value="">—</option>
+                        {locs2.map(l=><option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </td>
                     <td style={s.td}><button style={s.tBtn(dis)} onClick={()=>!dis&&setPicker({idx:i,time:r.dueBack||"00:00",date:r.dueDate||""})}>{dl}</button></td>
                     <td style={{...s.td,minWidth:"110px"}}><input style={s.ni2} value={r.notes} placeholder="—" onChange={e=>updateRow(i,"notes",e.target.value)} maxLength={80}/></td>
                   </tr>;
@@ -345,20 +372,20 @@ function App(){
           </div>
           {!locsUnlocked&&<PinPad onUnlock={()=>setLocsUnlocked(true)} title="ENTER PIN TO EDIT LOCATIONS & STATUS"/>}
 
-          {/* LOCATIONS SECTION */}
-          <div style={{...s.secT,marginTop:"0"}}>LOCATIONS</div>
+          {/* BED DOWN LOCATION SECTION */}
+          <div style={{...s.secT,marginTop:"0"}}>BED DOWN LOCATION</div>
           {locsUnlocked&&<>
             <div style={s.addRow}>
-              <input style={s.addInp} value={newLoc} placeholder="TYPE NEW LOCATION..." onChange={e=>setNewLoc(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addLoc()} maxLength={20}/>
+              <input style={s.addInp} value={newLoc} placeholder="TYPE NEW BED DOWN LOCATION..." onChange={e=>setNewLoc(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addLoc()} maxLength={20}/>
               <button style={s.addBtn} onClick={addLoc}>+ ADD</button>
             </div>
             <div style={{fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px",marginBottom:"10px"}}>Press ADD or hit Enter.</div>
           </>}
           <div style={s.locGrid}>{locs.map((l,i)=>{const c=PAL[i%PAL.length];return(<div key={l} style={s.locChip(c)}><div style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>{l}{locsUnlocked&&<button style={s.rmBtn} onClick={()=>removeLoc(l)}>✕</button>}</div>);})}</div>
-          <div style={s.warn}>⚠ Removing a location clears it from any personnel currently assigned to it.</div>
+          <div style={s.warn}>⚠ Removing clears it from any personnel currently assigned to it.</div>
 
           {/* STATUS SECTION */}
-          <div style={{...s.secT,marginTop:"20px"}}>STATUSES</div>
+          <div style={{...s.secT,marginTop:"20px"}}>STATUS</div>
           {locsUnlocked&&<>
             <div style={s.addRow}>
               <input style={s.addInp} value={newStatus} placeholder="TYPE NEW STATUS..." onChange={e=>setNewStatus(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addStatus()} maxLength={20}/>
@@ -367,7 +394,20 @@ function App(){
             <div style={{fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px",marginBottom:"10px"}}>Press ADD or hit Enter.</div>
           </>}
           <div style={s.locGrid}>{statuses.map((st,i)=>{const c=statusColor(st).color;return(<div key={st} style={s.locChip(c)}><div style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>{st}{locsUnlocked&&<button style={s.rmBtn} onClick={()=>removeStatus(st)}>✕</button>}</div>);})}</div>
-          <div style={{...s.warn,marginTop:"8px"}}>⚠ Removing a status clears it from any personnel currently assigned to it.</div>
+          <div style={{...s.warn,marginTop:"8px"}}>⚠ Removing clears it from any personnel currently assigned to it.</div>
+
+          {/* LOCATION SECTION */}
+          <div style={{...s.secT,marginTop:"20px"}}>LOCATION</div>
+          {locsUnlocked&&<>
+            <div style={s.addRow}>
+              <input style={s.addInp} value={newLoc2} placeholder="TYPE NEW LOCATION..." onChange={e=>setNewLoc2(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&addLoc2()} maxLength={20}/>
+              <button style={s.addBtn} onClick={addLoc2}>+ ADD</button>
+            </div>
+            <div style={{fontSize:"10px",color:"#5a6a7a",letterSpacing:"1px",marginBottom:"10px"}}>Press ADD or hit Enter.</div>
+          </>}
+          {locs2.length===0&&<div style={{fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px",padding:"8px 0"}}>{locsUnlocked?"No locations yet — add one above.":"No locations added yet."}</div>}
+          <div style={s.locGrid}>{locs2.map((l,i)=>{const c=PAL[(i+5)%PAL.length];return(<div key={l} style={s.locChip(c)}><div style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>{l}{locsUnlocked&&<button style={s.rmBtn} onClick={()=>removeLoc2(l)}>✕</button>}</div>);})}</div>
+          {locs2.length>0&&<div style={{...s.warn,marginTop:"8px"}}>⚠ Removing clears it from any personnel currently assigned to it.</div>}
         </>}
 
         {tab==="vehicles"&&<>
