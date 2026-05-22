@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moving &amp; Tracking — BDL Status Board</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+--bg: #080a0d; --panel: #0f1318; --border: #1e2630; --gold: #c9a84c; --gold-dim: #7a6330;
+--green: #2ecc71; --red: #e74c3c; --amber: #f39c12; --blue: #3498db; --purple: #9b59b6;
+--text: #d4dde8; --dim: #5a6a7a; --mono: 'Share Tech Mono', monospace; --sans: 'Barlow Condensed', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; }
+body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(201,168,76,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(201,168,76,0.025) 1px, transparent 1px); background-size: 40px 40px; pointer-events: none; z-index: 0; }
+.wrap { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 0 40px; }
+header { background: #0d1117; border-bottom: 2px solid var(--gold); padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.title { font-family: var(--sans); font-weight: 900; font-size: 26px; letter-spacing: 5px; color: #fff; text-transform: uppercase; }
+.title span { color: var(--gold); }
+.subtitle { font-size: 10px; color: var(--dim); letter-spacing: 3px; margin-top: 3px; text-transform: uppercase; }
+.header-right { text-align: right; }
+.slot-count { color: var(--gold); font-size: 13px; letter-spacing: 2px; }
+.overdue-count { color: var(--red); font-size: 10px; letter-spacing: 2px; margin-top: 2px; display: none; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); background: #0a0c0f; }
+.tab { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--dim); font-family: var(--mono); font-size: 11px; letter-spacing: 2px; padding: 11px 20px; cursor: pointer; text-transform: uppercase; margin-bottom: -1px; transition: all 0.15s; }
+.tab.active { border-bottom-color: var(--gold); color: var(--gold); background: var(--panel); }
+.body { padding: 16px 20px; }
+#connecting { text-align: center; padding: 60px 20px; color: var(--dim); font-size: 12px; letter-spacing: 3px; }
+.spinner { width: 30px; height: 30px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.stats-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.stat-card { background: var(--panel); border: 1px solid var(--border); padding: 8px 14px; display: flex; align-items: center; gap: 8px; }
+.stat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.stat-num { font-size: 20px; font-weight: bold; }
+.stat-lbl { font-size: 9px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
+#alert-banner { display: none; background: rgba(231,76,60,0.1); border: 1px solid var(--red); border-left: 4px solid var(--red); padding: 10px 16px; margin-bottom: 14px; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(231,76,60,0.2)} 50%{box-shadow:0 0 8px 2px rgba(231,76,60,0.15)} }
+.alert-title { color: var(--red); font-size: 10px; letter-spacing: 3px; margin-bottom: 8px; }
+.alert-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.alert-tag { background: rgba(231,76,60,0.2); border: 1px solid rgba(231,76,60,0.5); color: #ff8a80; padding: 3px 8px; font-size: 11px; }
+.table-wrap { background: var(--panel); border: 1px solid var(--border); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead tr { background: #0d1117; border-bottom: 1px solid var(--gold-dim); }
+th { font-size: 9px; letter-spacing: 3px; text-transform: uppercase; color: var(--gold); padding: 10px 12px; text-align: left; font-weight: normal; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid rgba(30,38,48,0.7); transition: background 0.15s; }
+tbody tr:hover { background: rgba(255,255,255,0.015); }
+tbody tr.overdue { background: rgba(231,76,60,0.07); animation: row-pulse 2s infinite; }
+@keyframes row-pulse { 0%,100%{background:rgba(231,76,60,0.07)} 50%{background:rgba(231,76,60,0.12)} }
+td { padding: 8px 12px; vertical-align: middle; }
+.num-cell { color: var(--dim); font-size: 11px; width: 32px; }
+.name-cell { min-width: 130px; }
+.ovrd-badge { background: var(--red); color: #fff; font-size: 8px; padding: 1px 5px; margin-left: 5px; letter-spacing: 1px; vertical-align: middle; }
+.ovrd-time { color: var(--red); font-size: 10px; margin-left: 4px; }
+.name-inp { background: transparent; border: none; border-bottom: 1px solid var(--border); color: #fff; font-family: var(--mono); font-size: 12px; padding: 3px 4px; outline: none; width: 100%; min-width: 110px; text-transform: uppercase; }
+.name-inp:focus { border-bottom-color: var(--gold-dim); }
+select { appearance: none; -webkit-appearance: none; font-family: var(--mono); font-size: 11px; padding: 5px 8px; cursor: pointer; outline: none; width: 100%; border-radius: 0; border: 1px solid; transition: all 0.15s; }
+select.loc { min-width: 110px; } select.stat { min-width: 100px; }
+select.s-in { color: var(--green); background: rgba(46,204,113,0.1); border-color: rgba(46,204,113,0.4); }
+select.s-out { color: var(--red); background: rgba(231,76,60,0.1); border-color: rgba(231,76,60,0.4); }
+select.s-rnr { color: var(--blue); background: rgba(52,152,219,0.1); border-color: rgba(52,152,219,0.4); }
+select.s-med { color: var(--amber); background: rgba(243,156,18,0.1); border-color: rgba(243,156,18,0.4); }
+select.s-task { color: var(--purple); background: rgba(155,89,182,0.1); border-color: rgba(155,89,182,0.4); }
+select.s-blank { color: var(--dim); background: var(--bg); border-color: var(--border); }
+input[type="time"] { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 11px; padding: 5px 7px; outline: none; width: 90px; }
+input[type="time"]:disabled { opacity: 0.3; cursor: not-allowed; }
+input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.4); }
+.notes-inp { background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--dim); font-family: var(--mono); font-size: 11px; padding: 3px 4px; outline: none; width: 100%; min-width: 110px; }
+.notes-inp:focus { border-bottom-color: var(--border); color: var(--text); }
+.loc-hint { font-size: 10px; color: var(--dim); letter-spacing: 1px; margin-bottom: 18px; }
+.add-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.add-inp { flex: 1; background: var(--panel); border: 1px solid var(--border); color: #fff; font-family: var(--mono); font-size: 13px; padding: 9px 12px; outline: none; letter-spacing: 1px; text-transform: uppercase; }
+.add-inp:focus { border-color: var(--gold-dim); }
+.add-btn { background: rgba(201,168,76,0.1); border: 1px solid var(--gold); color: var(--gold); font-family: var(--mono); font-size: 12px; letter-spacing: 2px; padding: 9px 18px; cursor: pointer; }
+.add-btn:hover { background: rgba(201,168,76,0.2); }
+.loc-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.loc-chip { display: flex; align-items: center; gap: 8px; border: 1px solid; padding: 7px 12px; font-size: 12px; letter-spacing: 1px; }
+.loc-chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.remove-btn { background: transparent; border: none; color: var(--red); cursor: pointer; font-size: 13px; padding: 0; line-height: 1; }
+.warning-box { margin-top: 16px; background: rgba(231,76,60,0.06); border: 1px solid rgba(231,76,60,0.2); padding: 10px 14px; font-size: 11px; color: #8a9aaa; }
+footer { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 10px; color: var(--dim); letter-spacing: 1px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+@media (max-width: 600px) { .title { font-size: 18px; } th, td { padding: 7px 8px; } input[type="time"] { width: 78px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<div>
+<div class="title">MOVING <span>&</span> TRACKING</div>
+<div class="subtitle">BDL Status Board // Live Personnel Tracking</div>
+</div>
+<div class="header-right">
+<div class="slot-count" id="slot-count">0/30 FILLED</div>
+<div class="overdue-count" id="overdue-count-hdr"></div>
+</div>
+</header>
+<div class="tabs">
+<button class="tab active" onclick="showTab('board', this)">Board</button>
+<button class="tab" onclick="showTab('locations', this)">Locations</button>
+</div>
+<div class="body">
+<div id="connecting"><div class="spinner"></div>CONNECTING TO DATABASE...</div>
+<div id="tab-board" style="display:none">
+<div class="stats-row" id="stats-row"></div>
+<div id="alert-banner"><div class="alert-title">⚠ OVERDUE PERSONNEL DETECTED</div><div class="alert-tags" id="alert-tags"></div></div>
+<div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Location</th><th>Status</th><th>Due Back (BHR)</th><th>Notes</th></tr></thead><tbody id="table-body"></tbody></table></div>
+<footer><span id="footer-sync">⬤ CONNECTING...</span><span>ALL TIMES BAHRAIN // 30 SLOTS</span></footer>
+</div>
+<div id="tab-locations" style="display:none">
+<div class="loc-hint">Add or remove locations. Changes apply instantly to every user's board.</div>
+<div class="add-row">
+<input class="add-inp" id="new-loc-inp" maxlength="20" placeholder="TYPE NEW LOCATION..." onkeydown="if(event.key==='Enter')addLocation()">
+<button class="add-btn" onclick="addLocation()">+ ADD</button>
+</div>
+<div style="font-size:10px;color:var(--dim);letter-spacing:1px">Hit ADD or press Enter.</div>
+<div style="margin:20px 0 8px;font-size:10px;color:var(--gold);letter-spacing:3px" id="loc-count-label">CURRENT LOCATIONS</div>
+<div class="loc-grid" id="loc-grid"></div>
+<div class="warning-box">⚠ Removing a location clears it from any personnel currently assigned to it.</div>
+</div>
+</div>
+</div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, update, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+const FIREBASE_URL = "https://move---track-default-rtdb.europe-west1.firebasedatabase.app";
+const app = initializeApp({ databaseURL: FIREBASE_URL });
+const db = getDatabase(app);
+const DEFAULT_LOCATIONS = ["WHITEHOUSE","SOF H","BEB","BDL","OUT"];
+const STATUSES = ["IN","OUT","R&R","MEDICAL","TASKING"];
+const LOC_PALETTE = ["#c9a84c","#3498db","#2ecc71","#9b59b6","#e74c3c","#e67e22","#1abc9c","#e91e63","#00bcd4","#8bc34a"];
+const STATUS_CLASS = { IN:"s-in",OUT:"s-out","R&R":"s-rnr",MEDICAL:"s-med",TASKING:"s-task","":"s-blank" };
+let boardData={}, locations=[...DEFAULT_LOCATIONS], isReady=false;
+function nowMins(){const n=new Date();return((n.getUTCHours()+3)%24)*60+n.getUTCMinutes();}
+function timeMins(t){if(!t)return null;const[h,m]=t.split(":").map(Number);return h*60+m;}
+function isOverdue(r){if(!r||!r.dueBack||r.status==="IN"||!r.status)return false;return nowMins()>timeMins(r.dueBack);}
+function overdueStr(r){const diff=nowMins()-timeMins(r.dueBack);const h=Math.floor(diff/60),m=diff%60;return h>0?`+${h}H ${m}M`:`+${m}M`;}
+function locColor(loc){const idx=locations.indexOf(loc);return idx>=0?LOC_PALETTE[idx%LOC_PALETTE.length]:"#5a6a7a";}
+function writeField(i,field,value){update(ref(db,`board/${i}`),{[field]:value});}
+function writeLocations(locs){set(ref(db,"locations"),locs);}
+function buildTable(){
+const tbody=document.getElementById("table-body");tbody.innerHTML="";
+for(let i=0;i<30;i++){
+const r=boardData[i]||{};const od=isOverdue(r);
+const tr=document.createElement("tr");if(od)tr.classList.add("overdue");tr.dataset.idx=i;
+const tdNum=document.createElement("td");tdNum.className="num-cell";tdNum.textContent=String(i+1).padStart(2,"0");tr.appendChild(tdNum);
+const tdName=document.createElement("td");tdName.className="name-cell";
+const nameInp=document.createElement("input");nameInp.className="name-inp";nameInp.value=r.name||"";nameInp.placeholder="—";nameInp.maxLength=25;
+nameInp.onchange=e=>{writeField(i,"name",e.target.value.toUpperCase());e.target.value=e.target.value.toUpperCase();};
+tdName.appendChild(nameInp);
+if(od){const b=document.createElement("span");b.className="ovrd-badge";b.textContent="OVRD";tdName.appendChild(b);const t=document.createElement("span");t.className="ovrd-time";t.textContent=overdueStr(r);tdName.appendChild(t);}
+tr.appendChild(tdName);
+const tdLoc=document.createElement("td");const locSel=document.createElement("select");locSel.className="loc";
+locSel.innerHTML=`<option value="">—</option>`+locations.map(l=>`<option value="${l}"${r.location===l?" selected":""}>${l}</option>`).join("");
+const lc=locColor(r.location||"");locSel.style.color=r.location?lc:"var(--dim)";locSel.style.background=r.location?lc+"18
