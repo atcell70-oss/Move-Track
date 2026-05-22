@@ -135,127 +135,6 @@ function TimePicker({time,date,onConfirm,onClear,onClose}){
   );
 }
 
-// WH DAY ROW - uncontrolled selects, writes direct to Firebase, no setState = no re-render
-function WHDayRow({dayLabel,date,month,dayKey,weekKey,boardNames,vehicleList,th,td,fnt}){
-  const MONS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-  const [dayData,setDayData] = useState({});
-  const mounted = useRef(false);
-
-  useEffect(()=>{
-    const ref=window.db.ref("whshifts/"+weekKey+"/"+dayKey);
-    ref.once("value",snap=>{ setDayData(snap.val()||{}); mounted.current=true; });
-    return()=>{ mounted.current=false; };
-  },[weekKey,dayKey]);
-
-  // Write directly to Firebase without touching React state
-  const write=(field,val)=>{ window.db.ref("whshifts/"+weekKey+"/"+dayKey).update({[field]:val}); };
-
-  const selStyle=(val,isVeh)=>({
-    appearance:"none",WebkitAppearance:"none",
-    background:isVeh?"#080a0d":"#080a0d",
-    border:"1px solid "+(isVeh?"#c9a84c33":"#1e2630"),
-    color:val?(isVeh?"#c9a84c":"#fff"):"#5a6a7a",
-    fontFamily:fnt,fontSize:"11px",padding:"5px 7px",
-    cursor:"pointer",outline:"none",width:"100%",minWidth:"130px",borderRadius:"0"
-  });
-
-  const ND=({fld,ph})=>(
-    <select defaultValue={dayData[fld]||""} key={weekKey+dayKey+fld+(dayData[fld]||"")} onChange={e=>write(fld,e.target.value)} style={selStyle(dayData[fld],false)}>
-      <option value="">{ph||"— SELECT —"}</option>
-      {boardNames.map(n=><option key={n} value={n}>{n}</option>)}
-    </select>
-  );
-
-  const VD=({fld})=>(
-    <select defaultValue={dayData[fld]||""} key={weekKey+dayKey+fld+(dayData[fld]||"")} onChange={e=>write(fld,e.target.value)} style={selStyle(dayData[fld],true)}>
-      <option value="">— SELECT VEH —</option>
-      {vehicleList.map(v=><option key={v} value={v}>{v}</option>)}
-    </select>
-  );
-
-  const sh={fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",margin:"12px 0 7px",fontFamily:fnt};
-  const fr={display:"flex",gap:"8px",marginBottom:"7px",alignItems:"center",flexWrap:"wrap"};
-  const lb={fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"75px",flexShrink:0,fontFamily:fnt};
-  const pl={fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"6px",fontFamily:fnt};
-
-  if(!mounted.current&&Object.keys(dayData).length===0) return <div style={{padding:"10px",color:"#5a6a7a",fontFamily:fnt,fontSize:"11px"}}>Loading...</div>;
-
-  return (
-    <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
-      <div style={{display:"flex",alignItems:"baseline",gap:"10px",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"4px"}}>
-        <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>{dayLabel}</span>
-        <span style={{fontFamily:fnt,fontSize:"12px",color:"#5a6a7a",letterSpacing:"2px"}}>{date} {MONS[month]}</span>
-      </div>
-      <div style={sh}>WH SHIFT</div>
-      <div style={fr}><span style={lb}>PERSON 1</span><ND fld="shift1"/></div>
-      <div style={fr}><span style={lb}>PERSON 2</span><ND fld="shift2"/></div>
-      <div style={sh}>COURIER</div>
-      <div style={fr}><span style={lb}>PERSON</span><ND fld="courierPerson"/></div>
-      <div style={fr}><span style={lb}>VEHICLE</span><VD fld="courierVeh"/></div>
-      <div style={pl}>PAX (UP TO 4)</div>
-      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"4px"}}>
-        {[1,2,3,4].map(n=><ND key={n} fld={"courierPax"+n} ph={"PAX "+n}/>)}
-      </div>
-      <div style={sh}>ESCORT</div>
-      <div style={fr}><span style={lb}>PERSON</span><ND fld="escortPerson"/></div>
-      <div style={fr}><span style={lb}>VEHICLE</span><VD fld="escortVeh"/></div>
-      <div style={pl}>PAX (UP TO 4)</div>
-      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"4px"}}>
-        {[1,2,3,4].map(n=><ND key={n} fld={"escortPax"+n} ph={"PAX "+n}/>)}
-      </div>
-    </div>
-  );
-}
-
-const WDAYS=["SAT","SUN","MON","TUE","WED","THU","FRI"];
-const WMONS_SHORT=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-
-function WHTab({whWeekStart,setWhWeekStart,whUnlocked,setWhUnlocked,boardNames,vehicleList,locs,f,s}){
-  const [pinState,setPinState] = useState({pin:"",err:false});
-  const weekKey="w"+whWeekStart;
-  const weekDates=Array.from({length:7},(_,i)=>{
-    const d=new Date(whWeekStart+i*86400000);
-    return{label:WDAYS[i],date:d.getUTCDate(),month:d.getUTCMonth(),key:WDAYS[i].toLowerCase()};
-  });
-  const sd=weekDates[0],ed=weekDates[6];
-  const fnt=f.mono;
-
-  const tryPin=(p)=>{
-    if(p===APP_PIN){setWhUnlocked(true);setPinState({pin:"",err:false});}
-    else{setPinState({pin:"",err:true});}
-  };
-
-  const btnS={background:"#0f1318",border:"1px solid #1e2630",color:"#d4dde8",fontFamily:fnt,fontSize:"20px",fontWeight:"bold",width:"70px",height:"60px",cursor:"pointer"};
-
-  return <>
-    <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px",flexWrap:"wrap"}}>
-      <button onClick={()=>setWhWeekStart(w=>w-7*86400000)} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>◀ PREV</button>
-      <div style={{color:"#fff",fontFamily:f.sans,fontSize:"18px",fontWeight:"900",letterSpacing:"3px"}}>{sd.date} {WMONS_SHORT[sd.month]} — {ed.date} {WMONS_SHORT[ed.month]}</div>
-      <button onClick={()=>setWhWeekStart(w=>w+7*86400000)} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>NEXT ▶</button>
-      <span style={{fontFamily:fnt,fontSize:"10px",letterSpacing:"2px",color:whUnlocked?"#2ecc71":"#e74c3c"}}>{whUnlocked?"🔓 UNLOCKED":"🔒 READ ONLY"}</span>
-      {whUnlocked&&<button onClick={()=>setWhUnlocked(false)} style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",color:"#e74c3c",fontFamily:fnt,fontSize:"10px",letterSpacing:"2px",padding:"5px 10px",cursor:"pointer"}}>LOCK</button>}
-    </div>
-
-    {!whUnlocked&&<div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"20px",marginBottom:"20px",maxWidth:"280px"}}>
-      <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"16px",fontFamily:fnt}}>ENTER PIN TO EDIT</div>
-      <div style={{display:"flex",gap:"10px",justifyContent:"center",marginBottom:"16px"}}>
-        {[0,1,2,3].map(i=><div key={i} style={{width:"40px",height:"40px",border:"1px solid "+(pinState.pin.length>i?"#c9a84c":"#1e2630"),display:"flex",alignItems:"center",justifyContent:"center",fontSize:"24px",color:"#c9a84c",fontFamily:fnt}}>{pinState.pin.length>i?"●":""}</div>)}
-      </div>
-      {pinState.err&&<div style={{color:"#e74c3c",fontSize:"10px",letterSpacing:"2px",textAlign:"center",marginBottom:"10px",fontFamily:fnt}}>INCORRECT PIN</div>}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,70px)",gap:"8px",justifyContent:"center"}}>
-        {[1,2,3,4,5,6,7,8,9].map(n=><button key={n} style={btnS} onClick={()=>{const np=pinState.pin.length<4?pinState.pin+n:pinState.pin;setPinState({pin:np,err:false});if(np.length===4)setTimeout(()=>tryPin(np),50);}}>{n}</button>)}
-        <button style={{...btnS,color:"#e74c3c",borderColor:"rgba(231,76,60,0.3)"}} onClick={()=>setPinState({pin:"",err:false})}>⌫</button>
-        <button style={btnS} onClick={()=>{const np=pinState.pin.length<4?pinState.pin+"0":pinState.pin;setPinState({pin:np,err:false});if(np.length===4)setTimeout(()=>tryPin(np),50);}}>0</button>
-        <button style={{...btnS,background:"rgba(201,168,76,0.15)",borderColor:"#c9a84c",color:"#c9a84c",fontSize:"14px"}} onClick={()=>tryPin(pinState.pin)}>OK</button>
-      </div>
-    </div>}
-
-    {weekDates.map(({label,date,month,key})=>(
-      <WHDayRow key={weekKey+key} dayLabel={label} date={date} month={month} dayKey={key} weekKey={weekKey} boardNames={boardNames} vehicleList={vehicleList} th={s.th} td={s.td} fnt={fnt}/>
-    ))}
-  </>;
-}
-
 // MAIN APP
 function App(){
   const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:""})));
@@ -268,13 +147,7 @@ function App(){
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
   const [picker,setPicker] = useState(null);
-  const [whUnlocked,setWhUnlocked] = useState(false);
-  const [whWeekStart,setWhWeekStart] = useState(()=>{
-    const n=new Date(new Date().getTime()+3*3600000);
-    const day=n.getUTCDay();
-    const diff=day===6?0:(day+1)%7;
-    return new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()-diff)).getTime();
-  });
+
   const [locsUnlocked,setLocsUnlocked] = useState(false);
   const [dragSrc,setDragSrc] = useState(null);
   const [dragOver,setDragOver] = useState(null);
@@ -298,7 +171,6 @@ function App(){
       setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",location:"",...(data[i]||{})})));
     });
     return()=>{ clearInterval(clk); db.ref("board").off(); db.ref("locations").off(); db.ref("vehicles").off(); db.ref("fuelcards").off(); };
-  // No WH listener needed - WH selects write directly to Firebase
   },[]);
 
   const wf = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
@@ -412,7 +284,7 @@ function App(){
         <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>Locations</button>
         <button style={s.tab(tab==="vehicles")} onClick={()=>setTab("vehicles")}>Vehicles</button>
         <button style={s.tab(tab==="fuelcards")} onClick={()=>setTab("fuelcards")}>Fuel Cards</button>
-        <button style={s.tab(tab==="wh")} onClick={()=>setTab("wh")}>WH Shifts</button>
+        <a href="wh.html" style={{...s.tab(false),textDecoration:"none",display:"inline-block"}}>WH Shifts</a>
       </div>
 
       <div style={s.body}>
@@ -523,7 +395,6 @@ function App(){
         </>}
 
       </div>
-        {tab==="wh"&&<WHTab whWeekStart={whWeekStart} setWhWeekStart={setWhWeekStart} whUnlocked={whUnlocked} setWhUnlocked={setWhUnlocked} boardNames={rows.filter(r=>r.name).map(r=>r.name)} vehicleList={vehicles.filter(v=>v.vrn).map(v=>v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:""))} locs={locs} f={f} s={s}/>}
 
       {picker&&<TimePicker time={picker.time} date={picker.date} onConfirm={(t,d)=>{updateRow(picker.idx,"dueBack",t);updateRow(picker.idx,"dueDate",d);setPicker(null);}} onClear={()=>{updateRow(picker.idx,"dueBack","");updateRow(picker.idx,"dueDate","");setPicker(null);}} onClose={()=>setPicker(null)}/>}
     </div>
