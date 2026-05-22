@@ -17,8 +17,8 @@
   body{background:var(--bg);color:var(--text)}
   body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
   #root{position:relative;z-index:1}
-  input[type=time]::-webkit-calendar-picker-indicator{filter:invert(.4)}
   select{-webkit-appearance:none;appearance:none}
+  div::-webkit-scrollbar{display:none}
 </style>
 </head>
 <body>
@@ -58,6 +58,7 @@ function App(){
   const [bhr,setBhr]=useState(bhrNow());
   const [zulu,setZulu]=useState(zuluNow());
   const [connected,setConnected]=useState(false);
+  const [picker,setPicker]=useState(null);
   const rowsRef=useRef(rows);
   rowsRef.current=rows;
 
@@ -140,7 +141,16 @@ function App(){
     td:{padding:"8px 12px",verticalAlign:"middle"},
     inp:{background:"transparent",border:"none",borderBottom:"1px solid #1e2630",color:"#fff",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"110px",textTransform:"uppercase"},
     sel:(val,map)=>({appearance:"none",WebkitAppearance:"none",background:map[val]?.bg||"#0a0c0f",border:`1px solid ${map[val]?.color||"#1e2630"}55`,color:map[val]?.color||"#5a6a7a",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",padding:"4px 6px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}),
-    timeInp:(dis)=>({background:"#080a0d",border:"1px solid #1e2630",color:dis?"#2a3440":"#d4dde8",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",padding:"4px 6px",outline:"none",width:"82px",cursor:dis?"not-allowed":"auto"}),
+    timeBtn:(dis)=>({background:dis?"transparent":"#080a0d",border:"1px solid "+(dis?"#1e2630":"#c9a84c44"),color:dis?"#2a3440":"#c9a84c",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",padding:"4px 8px",cursor:dis?"not-allowed":"pointer",letterSpacing:"2px",minWidth:"70px",textAlign:"center"}),
+    pickerOverlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"},
+    pickerBox:{background:"#0f1318",border:"1px solid #c9a84c",width:"100%",maxWidth:"400px",padding:"0 0 20px"},
+    pickerHeader:{background:"#0d1117",borderBottom:"1px solid #7a6330",padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"},
+    pickerTitle:{color:"#c9a84c",fontSize:"11px",letterSpacing:"3px"},
+    pickerDone:{background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:"'Share Tech Mono',monospace",fontSize:"12px",letterSpacing:"2px",padding:"6px 16px",cursor:"pointer"},
+    pickerCols:{display:"flex",justifyContent:"center",alignItems:"center",gap:"0",padding:"16px 0"},
+    pickerCol:{display:"flex",flexDirection:"column",alignItems:"center",width:"80px",height:"180px",overflowY:"scroll",scrollSnapType:"y mandatory",scrollbarWidth:"none"},
+    pickerItem:(sel)=>({scrollSnapAlign:"center",padding:"10px 0",fontSize:"22px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"700",letterSpacing:"2px",color:sel?"#c9a84c":"#5a6a7a",minHeight:"44px",display:"flex",alignItems:"center",justifyContent:"center",width:"100%",cursor:"pointer",transition:"color 0.15s"}),
+    pickerSep:{fontSize:"24px",color:"#c9a84c",fontWeight:"900",padding:"0 4px",marginTop:"-4px"},
     notesInp:{background:"transparent",border:"none",borderBottom:"1px solid transparent",color:"#5a6a7a",fontFamily:"'Share Tech Mono',monospace",fontSize:"11px",padding:"3px 4px",outline:"none",width:"100%",minWidth:"100px"},
     overdueBadge:{background:"#e74c3c",color:"#fff",fontSize:"8px",padding:"1px 5px",marginLeft:"4px",letterSpacing:"1px",verticalAlign:"middle"},
     overdueTime:{color:"#e74c3c",fontSize:"10px",marginLeft:"4px"},
@@ -163,6 +173,45 @@ function App(){
     {key:"TOTAL",label:"Total",color:"#c9a84c"},
     {key:"OVERDUE",label:"Overdue",color:"#e74c3c"},
   ];
+
+  const hours=Array.from({length:24},(_,i)=>String(i).padStart(2,"0"));
+  const mins=Array.from({length:60},(_,i)=>String(i).padStart(2,"0"));
+
+  function TimePicker(){
+    if(!picker)return null;
+    const [h,m]=(picker.time||"00:00").split(":");
+    const [selH,setSelH]=useState(h||"00");
+    const [selM,setSelM]=useState(m||"00");
+    const hRef=useRef(null);
+    const mRef=useRef(null);
+    useEffect(()=>{
+      if(hRef.current){const idx=parseInt(selH);hRef.current.scrollTop=idx*44;}
+      if(mRef.current){const idx=parseInt(selM);mRef.current.scrollTop=idx*44;}
+    },[]);
+    const confirmTime=()=>{
+      const t=selH+":"+selM;
+      updateRow(picker.rowIdx,"dueBack",t);
+      setPicker(null);
+    };
+    return <div style={s.pickerOverlay} onClick={e=>{if(e.target===e.currentTarget)setPicker(null);}}>
+      <div style={s.pickerBox}>
+        <div style={s.pickerHeader}>
+          <span style={s.pickerTitle}>SET DUE BACK TIME (BHR)</span>
+          <button style={s.pickerDone} onClick={confirmTime}>CONFIRM</button>
+        </div>
+        <div style={s.pickerCols}>
+          <div ref={hRef} style={s.pickerCol} onScroll={e=>{const idx=Math.round(e.target.scrollTop/44);setSelH(String(idx).padStart(2,"0"));}}>
+            {hours.map(hh=><div key={hh} style={s.pickerItem(hh===selH)} onClick={()=>{setSelH(hh);hRef.current.scrollTop=parseInt(hh)*44;}}>{hh}</div>)}
+          </div>
+          <div style={s.pickerSep}>:</div>
+          <div ref={mRef} style={s.pickerCol} onScroll={e=>{const idx=Math.round(e.target.scrollTop/44);setSelM(String(idx).padStart(2,"0"));}}>
+            {mins.map(mm=><div key={mm} style={s.pickerItem(mm===selM)} onClick={()=>{setSelM(mm);mRef.current.scrollTop=parseInt(mm)*44;}}>{mm}</div>)}
+          </div>
+        </div>
+        <div style={{textAlign:"center",fontSize:"32px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",color:"#c9a84c",letterSpacing:"4px"}}>{selH}:{selM}</div>
+      </div>
+    </div>;
+  }
 
   if(!connected) return (
     <div style={s.wrap}>
@@ -259,7 +308,13 @@ function App(){
                       </select>
                     </td>
                     <td style={s.td}>
-                      <input type="time" style={s.timeInp(r.status==="IN"||r.status==="")} value={r.dueBack} disabled={r.status==="IN"||r.status===""} onChange={e=>updateRow(i,"dueBack",e.target.value)}/>
+                      <button
+                        style={s.timeBtn(r.status==="IN"||r.status==="")}
+                        disabled={r.status==="IN"||r.status===""}
+                        onClick={()=>!(r.status==="IN"||r.status==="")&&setPicker({rowIdx:i,time:r.dueBack||"00:00"})}
+                      >
+                        {r.dueBack||"— : —"}
+                      </button>
                     </td>
                     <td style={{...s.td,minWidth:"110px"}}>
                       <input style={s.notesInp} value={r.notes} placeholder="—" onChange={e=>updateRow(i,"notes",e.target.value)} maxLength={80}/>
@@ -274,6 +329,8 @@ function App(){
             <span>ALL TIMES BAHRAIN // 100 SLOTS</span>
           </div>
         </>}
+
+        {picker&&<TimePicker/>}
 
         {tab==="locations"&&<>
           <div style={{marginBottom:"16px",fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"}}>ADD OR REMOVE LOCATIONS — CHANGES APPLY INSTANTLY TO EVERYONE</div>
