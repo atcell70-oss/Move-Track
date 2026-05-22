@@ -21,7 +21,6 @@ html,body,#root{min-height:100vh}
 body{background:#080a0d;color:#d4dde8}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
 #root{position:relative;z-index:1}
-#wh-root{position:relative;z-index:1;display:none;background:#080a0d;min-height:100vh}
 select{-webkit-appearance:none;appearance:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes rp{0%,100%{background:rgba(231,76,60,0.07)}50%{background:rgba(231,76,60,0.13)}}
@@ -30,7 +29,6 @@ select{-webkit-appearance:none;appearance:none}
 </head>
 <body>
 <div id="root"></div>
-<div id="wh-root"></div>
 
 <script type="text/babel">
 const db = window.db;
@@ -137,6 +135,127 @@ function TimePicker({time,date,onConfirm,onClear,onClose}){
   );
 }
 
+// WH DAY ROW - uncontrolled selects, writes direct to Firebase, no setState = no re-render
+function WHDayRow({dayLabel,date,month,dayKey,weekKey,boardNames,vehicleList,th,td,fnt}){
+  const MONS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  const [dayData,setDayData] = useState({});
+  const mounted = useRef(false);
+
+  useEffect(()=>{
+    const ref=window.db.ref("whshifts/"+weekKey+"/"+dayKey);
+    ref.once("value",snap=>{ setDayData(snap.val()||{}); mounted.current=true; });
+    return()=>{ mounted.current=false; };
+  },[weekKey,dayKey]);
+
+  // Write directly to Firebase without touching React state
+  const write=(field,val)=>{ window.db.ref("whshifts/"+weekKey+"/"+dayKey).update({[field]:val}); };
+
+  const selStyle=(val,isVeh)=>({
+    appearance:"none",WebkitAppearance:"none",
+    background:isVeh?"#080a0d":"#080a0d",
+    border:"1px solid "+(isVeh?"#c9a84c33":"#1e2630"),
+    color:val?(isVeh?"#c9a84c":"#fff"):"#5a6a7a",
+    fontFamily:fnt,fontSize:"11px",padding:"5px 7px",
+    cursor:"pointer",outline:"none",width:"100%",minWidth:"130px",borderRadius:"0"
+  });
+
+  const ND=({fld,ph})=>(
+    <select defaultValue={dayData[fld]||""} key={weekKey+dayKey+fld+(dayData[fld]||"")} onChange={e=>write(fld,e.target.value)} style={selStyle(dayData[fld],false)}>
+      <option value="">{ph||"— SELECT —"}</option>
+      {boardNames.map(n=><option key={n} value={n}>{n}</option>)}
+    </select>
+  );
+
+  const VD=({fld})=>(
+    <select defaultValue={dayData[fld]||""} key={weekKey+dayKey+fld+(dayData[fld]||"")} onChange={e=>write(fld,e.target.value)} style={selStyle(dayData[fld],true)}>
+      <option value="">— SELECT VEH —</option>
+      {vehicleList.map(v=><option key={v} value={v}>{v}</option>)}
+    </select>
+  );
+
+  const sh={fontSize:"9px",color:"#c9a84c",letterSpacing:"3px",margin:"12px 0 7px",fontFamily:fnt};
+  const fr={display:"flex",gap:"8px",marginBottom:"7px",alignItems:"center",flexWrap:"wrap"};
+  const lb={fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"75px",flexShrink:0,fontFamily:fnt};
+  const pl={fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"6px",fontFamily:fnt};
+
+  if(!mounted.current&&Object.keys(dayData).length===0) return <div style={{padding:"10px",color:"#5a6a7a",fontFamily:fnt,fontSize:"11px"}}>Loading...</div>;
+
+  return (
+    <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
+      <div style={{display:"flex",alignItems:"baseline",gap:"10px",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"4px"}}>
+        <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>{dayLabel}</span>
+        <span style={{fontFamily:fnt,fontSize:"12px",color:"#5a6a7a",letterSpacing:"2px"}}>{date} {MONS[month]}</span>
+      </div>
+      <div style={sh}>WH SHIFT</div>
+      <div style={fr}><span style={lb}>PERSON 1</span><ND fld="shift1"/></div>
+      <div style={fr}><span style={lb}>PERSON 2</span><ND fld="shift2"/></div>
+      <div style={sh}>COURIER</div>
+      <div style={fr}><span style={lb}>PERSON</span><ND fld="courierPerson"/></div>
+      <div style={fr}><span style={lb}>VEHICLE</span><VD fld="courierVeh"/></div>
+      <div style={pl}>PAX (UP TO 4)</div>
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"4px"}}>
+        {[1,2,3,4].map(n=><ND key={n} fld={"courierPax"+n} ph={"PAX "+n}/>)}
+      </div>
+      <div style={sh}>ESCORT</div>
+      <div style={fr}><span style={lb}>PERSON</span><ND fld="escortPerson"/></div>
+      <div style={fr}><span style={lb}>VEHICLE</span><VD fld="escortVeh"/></div>
+      <div style={pl}>PAX (UP TO 4)</div>
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"4px"}}>
+        {[1,2,3,4].map(n=><ND key={n} fld={"escortPax"+n} ph={"PAX "+n}/>)}
+      </div>
+    </div>
+  );
+}
+
+const WDAYS=["SAT","SUN","MON","TUE","WED","THU","FRI"];
+const WMONS_SHORT=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+function WHTab({whWeekStart,setWhWeekStart,whUnlocked,setWhUnlocked,boardNames,vehicleList,locs,f,s}){
+  const [pinState,setPinState] = useState({pin:"",err:false});
+  const weekKey="w"+whWeekStart;
+  const weekDates=Array.from({length:7},(_,i)=>{
+    const d=new Date(whWeekStart+i*86400000);
+    return{label:WDAYS[i],date:d.getUTCDate(),month:d.getUTCMonth(),key:WDAYS[i].toLowerCase()};
+  });
+  const sd=weekDates[0],ed=weekDates[6];
+  const fnt=f.mono;
+
+  const tryPin=(p)=>{
+    if(p===APP_PIN){setWhUnlocked(true);setPinState({pin:"",err:false});}
+    else{setPinState({pin:"",err:true});}
+  };
+
+  const btnS={background:"#0f1318",border:"1px solid #1e2630",color:"#d4dde8",fontFamily:fnt,fontSize:"20px",fontWeight:"bold",width:"70px",height:"60px",cursor:"pointer"};
+
+  return <>
+    <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px",flexWrap:"wrap"}}>
+      <button onClick={()=>setWhWeekStart(w=>w-7*86400000)} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>◀ PREV</button>
+      <div style={{color:"#fff",fontFamily:f.sans,fontSize:"18px",fontWeight:"900",letterSpacing:"3px"}}>{sd.date} {WMONS_SHORT[sd.month]} — {ed.date} {WMONS_SHORT[ed.month]}</div>
+      <button onClick={()=>setWhWeekStart(w=>w+7*86400000)} style={{background:"#0f1318",border:"1px solid #1e2630",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",padding:"7px 14px",cursor:"pointer"}}>NEXT ▶</button>
+      <span style={{fontFamily:fnt,fontSize:"10px",letterSpacing:"2px",color:whUnlocked?"#2ecc71":"#e74c3c"}}>{whUnlocked?"🔓 UNLOCKED":"🔒 READ ONLY"}</span>
+      {whUnlocked&&<button onClick={()=>setWhUnlocked(false)} style={{background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",color:"#e74c3c",fontFamily:fnt,fontSize:"10px",letterSpacing:"2px",padding:"5px 10px",cursor:"pointer"}}>LOCK</button>}
+    </div>
+
+    {!whUnlocked&&<div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"20px",marginBottom:"20px",maxWidth:"280px"}}>
+      <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"16px",fontFamily:fnt}}>ENTER PIN TO EDIT</div>
+      <div style={{display:"flex",gap:"10px",justifyContent:"center",marginBottom:"16px"}}>
+        {[0,1,2,3].map(i=><div key={i} style={{width:"40px",height:"40px",border:"1px solid "+(pinState.pin.length>i?"#c9a84c":"#1e2630"),display:"flex",alignItems:"center",justifyContent:"center",fontSize:"24px",color:"#c9a84c",fontFamily:fnt}}>{pinState.pin.length>i?"●":""}</div>)}
+      </div>
+      {pinState.err&&<div style={{color:"#e74c3c",fontSize:"10px",letterSpacing:"2px",textAlign:"center",marginBottom:"10px",fontFamily:fnt}}>INCORRECT PIN</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,70px)",gap:"8px",justifyContent:"center"}}>
+        {[1,2,3,4,5,6,7,8,9].map(n=><button key={n} style={btnS} onClick={()=>{const np=pinState.pin.length<4?pinState.pin+n:pinState.pin;setPinState({pin:np,err:false});if(np.length===4)setTimeout(()=>tryPin(np),50);}}>{n}</button>)}
+        <button style={{...btnS,color:"#e74c3c",borderColor:"rgba(231,76,60,0.3)"}} onClick={()=>setPinState({pin:"",err:false})}>⌫</button>
+        <button style={btnS} onClick={()=>{const np=pinState.pin.length<4?pinState.pin+"0":pinState.pin;setPinState({pin:np,err:false});if(np.length===4)setTimeout(()=>tryPin(np),50);}}>0</button>
+        <button style={{...btnS,background:"rgba(201,168,76,0.15)",borderColor:"#c9a84c",color:"#c9a84c",fontSize:"14px"}} onClick={()=>tryPin(pinState.pin)}>OK</button>
+      </div>
+    </div>}
+
+    {weekDates.map(({label,date,month,key})=>(
+      <WHDayRow key={weekKey+key} dayLabel={label} date={date} month={month} dayKey={key} weekKey={weekKey} boardNames={boardNames} vehicleList={vehicleList} th={s.th} td={s.td} fnt={fnt}/>
+    ))}
+  </>;
+}
+
 // MAIN APP
 function App(){
   const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",status:"",dueBack:"",dueDate:"",notes:""})));
@@ -149,6 +268,13 @@ function App(){
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
   const [picker,setPicker] = useState(null);
+  const [whUnlocked,setWhUnlocked] = useState(false);
+  const [whWeekStart,setWhWeekStart] = useState(()=>{
+    const n=new Date(new Date().getTime()+3*3600000);
+    const day=n.getUTCDay();
+    const diff=day===6?0:(day+1)%7;
+    return new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()-diff)).getTime();
+  });
   const [locsUnlocked,setLocsUnlocked] = useState(false);
   const [dragSrc,setDragSrc] = useState(null);
   const [dragOver,setDragOver] = useState(null);
@@ -172,6 +298,7 @@ function App(){
       setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",location:"",...(data[i]||{})})));
     });
     return()=>{ clearInterval(clk); db.ref("board").off(); db.ref("locations").off(); db.ref("vehicles").off(); db.ref("fuelcards").off(); };
+  // No WH listener needed - WH selects write directly to Firebase
   },[]);
 
   const wf = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
@@ -258,11 +385,7 @@ function App(){
 
   const SDEFS=[{key:"IN",label:"In Loc",color:"#2ecc71"},{key:"OUT",label:"Out",color:"#e74c3c"},{key:"R&R",label:"R&R",color:"#3498db"},{key:"MEDICAL",label:"Medical",color:"#f39c12"},{key:"TASKING",label:"Tasking",color:"#9b59b6"},{key:"TOTAL",label:"Total",color:"#c9a84c"},{key:"OVERDUE",label:"Overdue",color:"#e74c3c"}];
 
-  const switchToWH = () => {
-    document.getElementById("root").style.display="none";
-    document.getElementById("wh-root").style.display="block";
-    if(window.renderWH) window.renderWH();
-  };
+
 
   if(!connected) return (
     <div style={s.wrap}>
@@ -289,7 +412,7 @@ function App(){
         <button style={s.tab(tab==="locs")} onClick={()=>setTab("locs")}>Locations</button>
         <button style={s.tab(tab==="vehicles")} onClick={()=>setTab("vehicles")}>Vehicles</button>
         <button style={s.tab(tab==="fuelcards")} onClick={()=>setTab("fuelcards")}>Fuel Cards</button>
-        <button style={s.tab(false)} onClick={switchToWH}>WH Shifts</button>
+        <button style={s.tab(tab==="wh")} onClick={()=>setTab("wh")}>WH Shifts</button>
       </div>
 
       <div style={s.body}>
@@ -400,6 +523,8 @@ function App(){
         </>}
 
       </div>
+        {tab==="wh"&&<WHTab whWeekStart={whWeekStart} setWhWeekStart={setWhWeekStart} whUnlocked={whUnlocked} setWhUnlocked={setWhUnlocked} boardNames={rows.filter(r=>r.name).map(r=>r.name)} vehicleList={vehicles.filter(v=>v.vrn).map(v=>v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:""))} locs={locs} f={f} s={s}/>}
+
       {picker&&<TimePicker time={picker.time} date={picker.date} onConfirm={(t,d)=>{updateRow(picker.idx,"dueBack",t);updateRow(picker.idx,"dueDate",d);setPicker(null);}} onClear={()=>{updateRow(picker.idx,"dueBack","");updateRow(picker.idx,"dueDate","");setPicker(null);}} onClose={()=>setPicker(null)}/>}
     </div>
   );
@@ -407,132 +532,6 @@ function App(){
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
 
-<!-- WH SHIFTS — PURE VANILLA JS, NO REACT -->
-<script>
-var WH_PIN = "0121";
-var whUnlocked = false;
-var whWeekStart = (function(){
-  var n=new Date(new Date().getTime()+3*3600000);
-  var day=n.getUTCDay();
-  var diff=day===6?0:(day+1)%7;
-  return new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()-diff)).getTime();
-})();
-var whData={},whBoardNames=[],whVehicleList=[];
-var WDAYS=["SAT","SUN","MON","TUE","WED","THU","FRI"];
-var WMONS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
-function whPad(n){return String(n).padStart(2,"0");}
-
-window.db.ref("whshifts").on("value",function(s){whData=s.val()||{};});
-window.db.ref("board").on("value",function(s){var d=s.val()||{};whBoardNames=Object.values(d).filter(function(r){return r&&r.name;}).map(function(r){return r.name;});});
-window.db.ref("vehicles").on("value",function(s){var d=s.val()||{};whVehicleList=Object.values(d).filter(function(v){return v&&v.vrn;}).map(function(v){return v.vrn+(v.make?" — "+v.make:"")+(v.model?" "+v.model:"");});});
-
-function whWrite(wk,dk,field,val){var u={};u[field]=val;window.db.ref("whshifts/"+wk+"/"+dk).update(u);}
-function whDay(dk){return(whData["w"+whWeekStart]||{})[dk]||{};}
-
-function mkSel(fld,dk,opts,ph,isVeh){
-  var d=whDay(dk),val=d[fld]||"",wk="w"+whWeekStart;
-  var sel=document.createElement("select");
-  sel.style.cssText="appearance:none;-webkit-appearance:none;background:#080a0d;border:1px solid "+(isVeh?"#c9a84c33":"#1e2630")+";color:"+(val?(isVeh?"#c9a84c":"#fff"):"#5a6a7a")+";font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 7px;outline:none;width:100%;min-width:130px;border-radius:0;cursor:pointer";
-  var o0=document.createElement("option");o0.value="";o0.textContent=ph||"— SELECT —";sel.appendChild(o0);
-  opts.forEach(function(o){var op=document.createElement("option");op.value=o;op.textContent=o;if(o===val)op.selected=true;sel.appendChild(op);});
-  sel.addEventListener("change",function(){
-    if(!whUnlocked){sel.value=val;return;}
-    val=sel.value;
-    whWrite(wk,dk,fld,sel.value);
-    sel.style.color=sel.value?(isVeh?"#c9a84c":"#fff"):"#5a6a7a";
-  });
-  return sel;
-}
-
-function mkRow(lbl,el){
-  var r=document.createElement("div");r.style.cssText="display:flex;gap:8px;margin-bottom:7px;align-items:center;flex-wrap:wrap";
-  var l=document.createElement("span");l.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:2px;min-width:75px;flex-shrink:0;font-family:'Share Tech Mono',monospace";l.textContent=lbl;
-  r.appendChild(l);r.appendChild(el);return r;
-}
-function mkHdr(txt){var d=document.createElement("div");d.style.cssText="font-size:9px;color:#c9a84c;letter-spacing:3px;margin:12px 0 7px;font-family:'Share Tech Mono',monospace";d.textContent=txt;return d;}
-function mkPax(prefix,dk){
-  var w=document.createElement("div");
-  var l=document.createElement("div");l.style.cssText="font-size:9px;color:#5a6a7a;letter-spacing:2px;margin-bottom:6px;font-family:'Share Tech Mono',monospace";l.textContent="PAX (UP TO 4)";w.appendChild(l);
-  var r=document.createElement("div");r.style.cssText="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px";
-  [1,2,3,4].forEach(function(n){r.appendChild(mkSel(prefix+"Pax"+n,dk,whBoardNames,"PAX "+n,false));});
-  w.appendChild(r);return w;
-}
-
-function buildDayCard(i){
-  var d=new Date(whWeekStart+i*86400000),lbl=WDAYS[i],dt=d.getUTCDate(),mo=WMONS[d.getUTCMonth()],dk=lbl.toLowerCase();
-  var card=document.createElement("div");card.style.cssText="background:#0f1318;border:1px solid #1e2630;padding:14px 16px;margin-bottom:12px";
-  var hdr=document.createElement("div");hdr.style.cssText="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #1e2630;padding-bottom:10px;margin-bottom:4px";
-  var hl=document.createElement("span");hl.style.cssText="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:#c9a84c;letter-spacing:3px";hl.textContent=lbl;
-  var hd=document.createElement("span");hd.style.cssText="font-family:'Share Tech Mono',monospace;font-size:12px;color:#5a6a7a;letter-spacing:2px";hd.textContent=dt+" "+mo;
-  hdr.appendChild(hl);hdr.appendChild(hd);card.appendChild(hdr);
-  card.appendChild(mkHdr("WH SHIFT"));
-  card.appendChild(mkRow("PERSON 1",mkSel("shift1",dk,whBoardNames,"— SELECT —",false)));
-  card.appendChild(mkRow("PERSON 2",mkSel("shift2",dk,whBoardNames,"— SELECT —",false)));
-  card.appendChild(mkHdr("COURIER"));
-  card.appendChild(mkRow("PERSON",mkSel("courierPerson",dk,whBoardNames,"— SELECT —",false)));
-  card.appendChild(mkRow("VEHICLE",mkSel("courierVeh",dk,whVehicleList,"— SELECT VEH —",true)));
-  card.appendChild(mkPax("courier",dk));
-  card.appendChild(mkHdr("ESCORT"));
-  card.appendChild(mkRow("PERSON",mkSel("escortPerson",dk,whBoardNames,"— SELECT —",false)));
-  card.appendChild(mkRow("VEHICLE",mkSel("escortVeh",dk,whVehicleList,"— SELECT VEH —",true)));
-  card.appendChild(mkPax("escort",dk));
-  return card;
-}
-
-function buildPinPad(onSuccess){
-  var pin="",wrap=document.createElement("div");
-  wrap.style.cssText="background:#0f1318;border:1px solid #1e2630;padding:20px;margin-bottom:20px;max-width:280px";
-  var title=document.createElement("div");title.style.cssText="font-size:10px;color:#c9a84c;letter-spacing:3px;margin-bottom:16px;font-family:'Share Tech Mono',monospace";title.textContent="ENTER PIN TO EDIT";
-  var dots=document.createElement("div");dots.style.cssText="display:flex;gap:10px;justify-content:center;margin-bottom:16px";
-  var dotEls=[0,1,2,3].map(function(){var d=document.createElement("div");d.style.cssText="width:40px;height:40px;border:1px solid #1e2630;display:flex;align-items:center;justify-content:center;font-size:24px;color:#c9a84c;font-family:'Share Tech Mono',monospace";dots.appendChild(d);return d;});
-  var err=document.createElement("div");err.style.cssText="color:#e74c3c;font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:10px;font-family:'Share Tech Mono',monospace;display:none";err.textContent="INCORRECT PIN";
-  var upd=function(){dotEls.forEach(function(d,i){d.textContent=i<pin.length?"●":"";d.style.borderColor=i<pin.length?"#c9a84c":"#1e2630";});};
-  var grid=document.createElement("div");grid.style.cssText="display:grid;grid-template-columns:repeat(3,70px);gap:8px;justify-content:center";
-  var mkBtn=function(lbl,fn){var b=document.createElement("button");b.textContent=lbl;b.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#d4dde8;font-family:'Share Tech Mono',monospace;font-size:20px;font-weight:bold;width:70px;height:60px;cursor:pointer";b.onclick=fn;return b;};
-  [1,2,3,4,5,6,7,8,9].forEach(function(n){grid.appendChild(mkBtn(String(n),function(){if(pin.length<4){pin+=String(n);upd();}err.style.display="none";});});
-  var del=mkBtn("⌫",function(){pin=pin.slice(0,-1);upd();err.style.display="none";});del.style.color="#e74c3c";del.style.borderColor="rgba(231,76,60,0.3)";grid.appendChild(del);
-  grid.appendChild(mkBtn("0",function(){if(pin.length<4){pin+="0";upd();}err.style.display="none";}));
-  var ok=mkBtn("OK",function(){if(pin===WH_PIN){onSuccess();}else{err.style.display="block";pin="";upd();}});ok.style.background="rgba(201,168,76,0.15)";ok.style.borderColor="#c9a84c";ok.style.color="#c9a84c";ok.style.fontSize="14px";grid.appendChild(ok);
-  wrap.appendChild(title);wrap.appendChild(dots);wrap.appendChild(err);wrap.appendChild(grid);return wrap;
-}
-
-window.renderWH = function(){
-  var root=document.getElementById("wh-root");root.innerHTML="";
-  // Header
-  var hdr=document.createElement("div");hdr.style.cssText="background:#0d1117;border-bottom:2px solid #c9a84c;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px";
-  var hl=document.createElement("div");hl.innerHTML='<div style="font-family:Barlow Condensed,sans-serif;font-weight:900;font-size:26px;letter-spacing:5px;color:#fff;text-transform:uppercase">MOVING <span style="color:#c9a84c">&</span> TRACKING</div><div style="font-size:9px;color:#5a6a7a;letter-spacing:3px;margin-top:3px;text-transform:uppercase">BDL Status Board // Live Personnel Tracking</div>';
-  hdr.appendChild(hl);root.appendChild(hdr);
-  // Tabs
-  var tabs=document.createElement("div");tabs.style.cssText="display:flex;border-bottom:1px solid #1e2630;background:#0a0c0f;flex-wrap:wrap";
-  [["Board","board"],["Locations","locs"],["Vehicles","vehicles"],["Fuel Cards","fuelcards"],["WH Shifts","wh"]].forEach(function(t){
-    var b=document.createElement("button");b.textContent=t[0];
-    var active=t[1]==="wh";
-    b.style.cssText="background:"+(active?"#0f1318":"transparent")+";border:none;border-bottom:2px solid "+(active?"#c9a84c":"transparent")+";color:"+(active?"#c9a84c":"#5a6a7a")+";font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:11px 20px;cursor:pointer;text-transform:uppercase;margin-bottom:-1px";
-    b.onclick=function(){
-      if(t[1]==="wh")return;
-      document.getElementById("wh-root").style.display="none";
-      document.getElementById("root").style.display="block";
-    };
-    tabs.appendChild(b);
-  });
-  root.appendChild(tabs);
-  // Body
-  var body=document.createElement("div");body.style.cssText="padding:14px 20px;max-width:1400px;margin:0 auto";
-  // Week nav
-  var nav=document.createElement("div");nav.style.cssText="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap";
-  var startD=new Date(whWeekStart),endD=new Date(whWeekStart+6*86400000);
-  var prev=document.createElement("button");prev.textContent="◀ PREV";prev.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer";prev.onclick=function(){whWeekStart-=7*86400000;window.renderWH();};
-  var wkTitle=document.createElement("div");wkTitle.style.cssText="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:900;letter-spacing:3px";wkTitle.textContent=startD.getUTCDate()+" "+WMONS[startD.getUTCMonth()]+" — "+endD.getUTCDate()+" "+WMONS[endD.getUTCMonth()];
-  var next=document.createElement("button");next.textContent="NEXT ▶";next.style.cssText="background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;padding:7px 14px;cursor:pointer";next.onclick=function(){whWeekStart+=7*86400000;window.renderWH();};
-  var lkStatus=document.createElement("span");lkStatus.style.cssText="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;margin-left:8px;color:"+(whUnlocked?"#2ecc71":"#e74c3c");lkStatus.textContent=whUnlocked?"🔓 UNLOCKED":"🔒 READ ONLY";
-  nav.appendChild(prev);nav.appendChild(wkTitle);nav.appendChild(next);nav.appendChild(lkStatus);
-  if(whUnlocked){var lkBtn=document.createElement("button");lkBtn.textContent="LOCK";lkBtn.style.cssText="background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);color:#e74c3c;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:5px 10px;cursor:pointer";lkBtn.onclick=function(){whUnlocked=false;window.renderWH();};nav.appendChild(lkBtn);}
-  body.appendChild(nav);
-  if(!whUnlocked) body.appendChild(buildPinPad(function(){whUnlocked=true;window.renderWH();}));
-  for(var i=0;i<7;i++) body.appendChild(buildDayCard(i));
-  root.appendChild(body);
-};
-</script>
 </body>
 </html>
