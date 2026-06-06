@@ -364,6 +364,7 @@ function App(){
         <button style={s.tab(tab==="rooms")} onClick={()=>setTab("rooms")}>Rooms</button>
         <button style={s.tab(tab==="fp")} onClick={()=>setTab("fp")}>FP Numbers</button>
         <button style={s.tab(tab==="evac")} onClick={()=>setTab("evac")}>EVAC Pac List</button>
+        <button style={s.tab(tab==="map")} onClick={()=>setTab("map")}>🗺 Bahrain Map</button>
       </div>
 
       <div style={s.body}>
@@ -600,8 +601,141 @@ function App(){
         {/* EVAC PAC LIST TAB */}
         {tab==="evac"&&<EvacTab evacData={evacData} writeEvac={writeEvac} vehicles={vehicles} rows={rows} f={f} s={s}/>}
 
+        {/* BAHRAIN MAP TAB */}
+        {tab==="map"&&<BahrainMap f={f}/>}
+
       {/* Install popup - shows once, dismissed if already installed */}
       {installable&&!installed&&tab!=="install"&&<InstallBanner onInstall={()=>{if(window.deferredInstallPrompt){window.deferredInstallPrompt.prompt();window.deferredInstallPrompt.userChoice.then(r=>{if(r.outcome==="accepted"){setInstalled(true);setInstallable(false);}});}}} onDismiss={()=>setInstallable(false)} f={f}/>}
+    </div>
+  );
+}
+
+function BahrainMap({f}){
+  const [selected,setSelected] = React.useState(null);
+  const regions = [
+    {id:"manama",name:"Manama",cx:310,cy:118,desc:"Capital city — main urban centre"},
+    {id:"muharraq",name:"Muharraq",cx:360,cy:72,desc:"Northern island — airport area"},
+    {id:"seef",name:"Seef",cx:290,cy:105,desc:"Commercial district, north Manama"},
+    {id:"jidhafs",name:"Jidhafs",cx:255,cy:108,desc:"Central-north residential area"},
+    {id:"budaiya",name:"Budaiya",cx:185,cy:118,desc:"Northwest coastal area"},
+    {id:"salmabad",name:"Salmabad",cx:262,cy:140,desc:"Central area south of Jidhafs"},
+    {id:"isatown",name:"Isa Town",cx:275,cy:168,desc:"Central planned town"},
+    {id:"sitra",name:"Sitra",cx:330,cy:168,desc:"East coast industrial island"},
+    {id:"riffa",name:"Riffa",cx:255,cy:198,desc:"Southern residential area"},
+    {id:"hamala",name:"Hamala",cx:210,cy:188,desc:"West central area"},
+    {id:"malkiya",name:"Malkiya",cx:218,cy:225,desc:"Northwest coastal village"},
+    {id:"awali",name:"Awali",cx:258,cy:235,desc:"Central company town"},
+    {id:"zallaq",name:"Zallaq",cx:208,cy:268,desc:"Southwest coast"},
+    {id:"askar",name:"Askar",cx:308,cy:258,desc:"East coast area"},
+    {id:"jaww",name:"Jaww",cx:305,cy:295,desc:"Southeast area"},
+    {id:"aldur",name:"Al Dur",cx:298,cy:325,desc:"South coast area"},
+    {id:"galali",name:"Galali",cx:390,cy:68,desc:"Northeast — near naval base"},
+    {id:"arad",name:"Arad",cx:378,cy:88,desc:"Muharraq area"},
+    {id:"alsayh",name:"Al Sayh",cx:338,cy:58,desc:"North Muharraq region"},
+    {id:"umnaasan",name:"Um Al Naasan",cx:128,cy:198,desc:"Western island"},
+  ];
+
+  const sel = selected ? regions.find(r=>r.id===selected) : null;
+
+  return (
+    <div>
+      <div style={{marginBottom:"14px",fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px",fontFamily:f.mono}}>
+        BAHRAIN REGION REFERENCE MAP — TAP A REGION TO SEE DETAILS
+      </div>
+
+      {sel&&(
+        <div style={{background:"rgba(201,168,76,0.08)",border:"1px solid #c9a84c",padding:"10px 16px",marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
+          <div>
+            <div style={{color:"#c9a84c",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",fontSize:"20px",letterSpacing:"3px"}}>{sel.name.toUpperCase()}</div>
+            <div style={{color:"#5a6a7a",fontFamily:f.mono,fontSize:"11px",letterSpacing:"1px",marginTop:"3px"}}>{sel.desc}</div>
+          </div>
+          <button onClick={()=>setSelected(null)} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px"}}>✕</button>
+        </div>
+      )}
+
+      <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"8px",overflowX:"auto"}}>
+        <svg viewBox="0 0 500 440" style={{width:"100%",maxWidth:"600px",display:"block",margin:"0 auto"}}>
+          {/* Sea background */}
+          <rect width="500" height="440" fill="#0d1f2d"/>
+
+          {/* Grid lines */}
+          {[0,50,100,150,200,250,300,350,400].map(x=>(
+            <line key={"vg"+x} x1={x} y1="0" x2={x} y2="440" stroke="rgba(201,168,76,0.05)" strokeWidth="1"/>
+          ))}
+          {[0,50,100,150,200,250,300,350,400].map(y=>(
+            <line key={"hg"+y} x1="0" y1={y} x2="500" y2={y} stroke="rgba(201,168,76,0.05)" strokeWidth="1"/>
+          ))}
+
+          {/* Main Bahrain island outline (simplified polygon) */}
+          <polygon
+            points="220,95 240,78 265,70 295,68 320,72 355,65 380,70 395,85 388,105 370,118 355,125 340,130 335,145 345,165 340,185 325,200 320,225 315,255 308,285 298,315 285,340 270,370 255,390 240,400 230,390 228,370 235,345 232,320 225,295 220,275 215,258 208,240 205,218 210,200 208,178 210,158 218,140 215,118"
+            fill="#1a2a1a" stroke="#2ecc71" strokeWidth="1.5" opacity="0.9"
+          />
+
+          {/* Muharraq island */}
+          <polygon
+            points="335,58 360,52 395,60 400,78 388,92 368,98 348,90 335,78"
+            fill="#1a2a1a" stroke="#2ecc71" strokeWidth="1.5" opacity="0.9"
+          />
+
+          {/* Um Al Naasan island */}
+          <polygon
+            points="110,185 135,178 148,190 145,210 128,218 112,210"
+            fill="#1a2a1a" stroke="#2ecc71" strokeWidth="1.5" opacity="0.9"
+          />
+
+          {/* Sitra island */}
+          <polygon
+            points="318,155 340,150 355,162 352,180 335,188 318,178"
+            fill="#1a2a1a" stroke="#2ecc71" strokeWidth="1.5" opacity="0.9"
+          />
+
+          {/* Region dots and labels */}
+          {regions.map(r=>{
+            const isSel = selected===r.id;
+            return (
+              <g key={r.id} onClick={()=>setSelected(isSel?null:r.id)} style={{cursor:"pointer"}}>
+                <circle cx={r.cx} cy={r.cy} r={isSel?10:6}
+                  fill={isSel?"#c9a84c":"rgba(201,168,76,0.3)"}
+                  stroke={isSel?"#c9a84c":"rgba(201,168,76,0.6)"}
+                  strokeWidth={isSel?2:1}
+                />
+                <text x={r.cx} y={r.cy-12}
+                  textAnchor="middle"
+                  fill={isSel?"#c9a84c":"#8a9aaa"}
+                  fontSize={isSel?"11":"9"}
+                  fontFamily="Share Tech Mono, monospace"
+                  fontWeight={isSel?"bold":"normal"}
+                  style={{pointerEvents:"none",textShadow:"0 0 4px #000"}}
+                >{r.name}</text>
+              </g>
+            );
+          })}
+
+          {/* Labels */}
+          <text x="55" y="30" fill="rgba(201,168,76,0.4)" fontSize="11" fontFamily="Share Tech Mono, monospace">SAUDI ARABIA</text>
+          <text x="400" y="220" fill="rgba(52,152,219,0.5)" fontSize="10" fontFamily="Share Tech Mono, monospace" transform="rotate(90,400,220)">PERSIAN GULF</text>
+          <text x="60" y="310" fill="rgba(52,152,219,0.5)" fontSize="9" fontFamily="Share Tech Mono, monospace">GULF OF</text>
+          <text x="55" y="322" fill="rgba(52,152,219,0.5)" fontSize="9" fontFamily="Share Tech Mono, monospace">BAHRAIN</text>
+          <text x="195" y="308" fill="rgba(255,255,255,0.15)" fontSize="24" fontFamily="Barlow Condensed, sans-serif" fontWeight="900" letterSpacing="4">BAHRAIN</text>
+
+          {/* Manama star */}
+          <text x="308" y="122" fontSize="14" textAnchor="middle" fill="#e74c3c" style={{pointerEvents:"none"}}>★</text>
+        </svg>
+      </div>
+
+      {/* Region list */}
+      <div style={{marginTop:"14px"}}>
+        <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"10px",fontFamily:f.mono}}>ALL REGIONS</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+          {regions.map(r=>(
+            <button key={r.id} onClick={()=>setSelected(selected===r.id?null:r.id)}
+              style={{background:selected===r.id?"rgba(201,168,76,0.15)":"#0f1318",border:"1px solid "+(selected===r.id?"#c9a84c":"#1e2630"),color:selected===r.id?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",letterSpacing:"1px",padding:"5px 10px",cursor:"pointer"}}>
+              {r.name}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -706,7 +840,6 @@ function InstallBanner({onInstall,onDismiss,f}){
 }
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
-
 
 </body>
 </html>
