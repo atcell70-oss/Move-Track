@@ -619,103 +619,167 @@ function App(){
 function BahrainMap({f}){
   const mapRef = React.useRef(null);
   const mapInstanceRef = React.useRef(null);
+  const layersRef = React.useRef({});
+  const [loading,setLoading] = React.useState(true);
   const [selected,setSelected] = React.useState(null);
+  const [regions,setRegions] = React.useState([]);
+  const [error,setError] = React.useState(null);
 
-  const regions = [
-    {id:"manama",     name:"Manama",        lat:26.2235, lng:50.5876, desc:"Capital city — main urban centre", capital:true},
-    {id:"muharraq",   name:"Muharraq",      lat:26.2592, lng:50.6117, desc:"Northern island — airport area"},
-    {id:"seef",       name:"Seef",          lat:26.2154, lng:50.5425, desc:"Commercial district, north Manama"},
-    {id:"jidhafs",    name:"Jidhafs",       lat:26.2086, lng:50.5275, desc:"Central-north residential area"},
-    {id:"budaiya",    name:"Budaiya",       lat:26.1972, lng:50.4542, desc:"Northwest coastal area"},
-    {id:"salmabad",   name:"Salmabad",      lat:26.1736, lng:50.5133, desc:"Central area south of Jidhafs"},
-    {id:"isatown",    name:"Isa Town",      lat:26.1703, lng:50.5486, desc:"Central planned town"},
-    {id:"sitra",      name:"Sitra",         lat:26.1503, lng:50.6064, desc:"East coast industrial island"},
-    {id:"riffa",      name:"Riffa",         lat:26.1297, lng:50.5553, desc:"Southern residential area"},
-    {id:"hamala",     name:"Hamala",        lat:26.1628, lng:50.4822, desc:"West central area"},
-    {id:"malkiya",    name:"Malkiya",       lat:26.1239, lng:50.4542, desc:"Northwest coastal village"},
-    {id:"awali",      name:"Awali",         lat:26.0836, lng:50.5483, desc:"Central company town"},
-    {id:"zallaq",     name:"Zallaq",        lat:26.0403, lng:50.4886, desc:"Southwest coast"},
-    {id:"askar",      name:"Askar",         lat:26.1094, lng:50.5869, desc:"East coast area"},
-    {id:"jaww",       name:"Jaww",          lat:25.9681, lng:50.5611, desc:"Southeast area"},
-    {id:"aldur",      name:"Al Dur",        lat:25.9189, lng:50.5542, desc:"South coast area"},
-    {id:"galali",     name:"Galali",        lat:26.2881, lng:50.6458, desc:"Northeast — near naval base"},
-    {id:"arad",       name:"Arad",          lat:26.2522, lng:50.6364, desc:"Muharraq area"},
-    {id:"alsayh",     name:"Al Sayh",       lat:26.2844, lng:50.6158, desc:"North Muharraq region"},
-    {id:"umnaasan",   name:"Um Al Naasan",  lat:26.1597, lng:50.3908, desc:"Western island"},
-    {id:"durrat",     name:"Durrat Al Bahrain", lat:25.6558, lng:50.4900, desc:"Southern resort island"},
-    {id:"alhadd",     name:"Al Hadd",       lat:26.2225, lng:50.6561, desc:"East Muharraq coast"},
-    {id:"tubli",      name:"Tubli",         lat:26.1869, lng:50.5706, desc:"Coastal area east of Manama"},
-  ];
+  const fnt = f.mono;
+
+  // Colours for highlight
+  const HIGHLIGHT = "#c9a84c";
+  const DEFAULT_FILL = "rgba(46,204,113,0.15)";
+  const DEFAULT_STROKE = "#2ecc71";
+  const SEL_FILL = "rgba(201,168,76,0.35)";
+  const SEL_STROKE = "#c9a84c";
 
   React.useEffect(()=>{
     if(!mapRef.current || mapInstanceRef.current) return;
-    // Init map centred on Bahrain
-    const map = L.map(mapRef.current, {
-      center: [26.0667, 50.5577],
-      zoom: 11,
-      zoomControl: true,
-      attributionControl: false,
+
+    const map = L.map(mapRef.current,{
+      center:[26.07,50.54],
+      zoom:11,
+      zoomControl:true,
+      attributionControl:true,
     });
     mapInstanceRef.current = map;
 
-    // Dark OSM tile layer
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      subdomains: 'abcd',
+    // Dark tile layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+      maxZoom:19,subdomains:'abcd',
+      attribution:'© OpenStreetMap © CARTO'
     }).addTo(map);
 
-    // Add region markers
-    regions.forEach(r=>{
-      const icon = L.divIcon({
-        className: '',
-        html: '<div style="width:'+(r.capital?'16':'12')+'px;height:'+(r.capital?'16':'12')+'px;border-radius:50%;background:'+(r.capital?'#e74c3c':'#c9a84c')+';border:2px solid '+(r.capital?'#ff6b6b':'#fff')+'88;box-shadow:0 0 6px '+(r.capital?'#e74c3c':'#c9a84c')+'88;cursor:pointer"></div>',
-        iconSize: [r.capital?16:12, r.capital?16:12],
-        iconAnchor: [r.capital?8:6, r.capital?8:6],
-      });
-      const marker = L.marker([r.lat,r.lng],{icon}).addTo(map);
-      marker.bindPopup(
-        '<div style="font-family:Share Tech Mono,monospace;min-width:160px">'+
-        '<div style="color:#c9a84c;font-size:13px;font-weight:bold;letter-spacing:2px;margin-bottom:4px">'+r.name.toUpperCase()+'</div>'+
-        '<div style="color:#8a9aaa;font-size:11px;letter-spacing:0.5px">'+r.desc+'</div>'+
-        '<div style="margin-top:8px;font-size:10px;color:#5a6a7a;letter-spacing:1px">'+r.lat.toFixed(4)+'°N, '+r.lng.toFixed(4)+'°E</div>'+
-        '</div>',
-        {maxWidth:220, closeButton:true}
+    // Fetch all Bahrain districts from Overpass
+    const query = `
+      [out:json][timeout:30];
+      area["ISO3166-1"="BH"]["admin_level"="2"]->.bahrain;
+      (
+        relation["admin_level"~"^(6|7|8|9)$"](area.bahrain);
       );
+      out geom;
+    `;
+
+    fetch('https://overpass-api.de/api/interpreter',{
+      method:'POST',
+      body:'data='+encodeURIComponent(query)
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      const regionList = [];
+
+      data.elements.forEach(el=>{
+        if(el.type!=='relation') return;
+        const name = el.tags['name:en'] || el.tags['name'] || el.tags['name:ar_Latn'];
+        if(!name) return;
+
+        // Build GeoJSON polygon from relation members
+        const outerWays = el.members.filter(m=>m.role==='outer'&&m.geometry);
+        if(!outerWays.length) return;
+
+        const coordinates = outerWays.map(w=>w.geometry.map(pt=>[pt.lon,pt.lat]));
+
+        const geojson = {
+          type:'Feature',
+          properties:{name,id:el.id},
+          geometry:{type:'Polygon',coordinates}
+        };
+
+        // Calculate centroid for label
+        let latSum=0,lngSum=0,count=0;
+        outerWays.forEach(w=>w.geometry.forEach(pt=>{latSum+=pt.lat;lngSum+=pt.lon;count++;}));
+        const centroid = count>0 ? [latSum/count, lngSum/count] : [26.07,50.54];
+
+        const layer = L.geoJSON(geojson,{
+          style:{
+            color:DEFAULT_STROKE,
+            weight:1.5,
+            fillColor:DEFAULT_FILL,
+            fillOpacity:0.4,
+            opacity:0.8,
+          }
+        }).addTo(map);
+
+        // Label marker
+        const labelIcon = L.divIcon({
+          className:'',
+          html:'<div style="color:#d4dde8;font-family:Share Tech Mono,monospace;font-size:10px;font-weight:bold;text-shadow:0 0 4px #000,0 0 4px #000;white-space:nowrap;pointer-events:none;letter-spacing:1px">'+name+'</div>',
+          iconAnchor:[0,0],
+        });
+        const labelMarker = L.marker(centroid,{icon:labelIcon,interactive:false}).addTo(map);
+
+        // Click to select
+        layer.on('click',()=>selectRegion(name,layer));
+
+        const rid = 'r'+el.id;
+        layersRef.current[rid] = {layer,name,centroid,labelMarker};
+        regionList.push({id:rid,name,centroid});
+      });
+
+      // Sort alphabetically
+      regionList.sort((a,b)=>a.name.localeCompare(b.name));
+      setRegions(regionList);
+      setLoading(false);
+    })
+    .catch(err=>{
+      console.error(err);
+      setError("Failed to load boundary data. Check internet connection.");
+      setLoading(false);
     });
 
-    // Bahrain border overlay using GeoJSON bounds
-    fetch('https://nominatim.openstreetmap.org/search?country=bahrain&format=json&polygon_geojson=1')
-      .catch(()=>{});
-
-    return()=>{ if(mapInstanceRef.current){mapInstanceRef.current.remove();mapInstanceRef.current=null;} };
+    return()=>{ if(mapInstanceRef.current){mapInstanceRef.current.remove();mapInstanceRef.current=null;layersRef.current={};} };
   },[]);
+
+  const selectRegion = (name,layer)=>{
+    // Reset all
+    Object.values(layersRef.current).forEach(r=>{
+      r.layer.setStyle({color:DEFAULT_STROKE,weight:1.5,fillColor:DEFAULT_FILL,fillOpacity:0.4,opacity:0.8});
+    });
+    if(layer){
+      layer.setStyle({color:SEL_STROKE,weight:3,fillColor:SEL_FILL,fillOpacity:0.6,opacity:1});
+      layer.bringToFront();
+    }
+    setSelected(name);
+  };
+
+  const jumpTo = (rid)=>{
+    const r = layersRef.current[rid];
+    if(!r||!mapInstanceRef.current) return;
+    selectRegion(r.name,r.layer);
+    mapInstanceRef.current.fitBounds(r.layer.getBounds(),{padding:[20,20]});
+  };
 
   return (
     <div>
       <div style={{marginBottom:"10px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
-        <div style={{fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px",fontFamily:f.mono}}>BAHRAIN REGION REFERENCE — TAP ANY MARKER FOR DETAILS</div>
-        <div style={{display:"flex",gap:"12px",fontSize:"10px",fontFamily:f.mono,letterSpacing:"1px"}}>
-          <span><span style={{color:"#e74c3c"}}>★</span> <span style={{color:"#5a6a7a"}}>Capital</span></span>
-          <span><span style={{color:"#c9a84c"}}>●</span> <span style={{color:"#5a6a7a"}}>Region</span></span>
-        </div>
+        <div style={{fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px",fontFamily:fnt}}>BAHRAIN DISTRICT MAP — REAL OSM BOUNDARIES — TAP REGION TO HIGHLIGHT</div>
+        {loading&&<div style={{color:"#c9a84c",fontFamily:fnt,fontSize:"10px",letterSpacing:"2px"}}>⟳ LOADING BOUNDARIES...</div>}
+        {error&&<div style={{color:"#e74c3c",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>{error}</div>}
       </div>
-      <div ref={mapRef} style={{height:"500px",border:"1px solid #1e2630",width:"100%"}}/>
-      <div style={{marginTop:"12px"}}>
-        <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"8px",fontFamily:f.mono}}>ALL REGIONS — TAP TO JUMP TO LOCATION</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
-          {regions.map(r=>(
-            <button key={r.id}
-              onClick={()=>{
-                if(mapInstanceRef.current){
-                  mapInstanceRef.current.setView([r.lat,r.lng],13);
-                }
-              }}
-              style={{background:"#0f1318",border:"1px solid #1e2630",color:"#5a6a7a",fontFamily:f.mono,fontSize:"11px",letterSpacing:"1px",padding:"5px 10px",cursor:"pointer"}}>
-              {r.name}
-            </button>
-          ))}
+
+      {selected&&(
+        <div style={{background:"rgba(201,168,76,0.08)",border:"1px solid #c9a84c",padding:"10px 16px",marginBottom:"10px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
+          <div style={{color:"#c9a84c",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",fontSize:"20px",letterSpacing:"3px"}}>{selected.toUpperCase()}</div>
+          <button onClick={()=>{selectRegion(null,null);setSelected(null);}} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px"}}>✕</button>
         </div>
-      </div>
+      )}
+
+      <div ref={mapRef} style={{height:"520px",border:"1px solid #1e2630",width:"100%"}}/>
+
+      {regions.length>0&&(
+        <div style={{marginTop:"12px"}}>
+          <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"8px",fontFamily:fnt}}>DISTRICTS ({regions.length}) — TAP TO ZOOM & HIGHLIGHT</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+            {regions.map(r=>(
+              <button key={r.id} onClick={()=>jumpTo(r.id)}
+                style={{background:selected===r.name?"rgba(201,168,76,0.15)":"#0f1318",border:"1px solid "+(selected===r.name?"#c9a84c":"#1e2630"),color:selected===r.name?"#c9a84c":"#5a6a7a",fontFamily:fnt,fontSize:"11px",letterSpacing:"1px",padding:"5px 10px",cursor:"pointer"}}>
+                {r.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
