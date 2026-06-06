@@ -10,10 +10,28 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c9a84c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="M&T Board">
 <script>
 // Firebase init OUTSIDE babel so both React and vanilla JS can use it
 firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
 window.db = firebase.database();
+// Register service worker
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+// PWA install prompt
+window.deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  window.deferredInstallPrompt = e;
+  window.dispatchEvent(new Event('pwa-installable'));
+});
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -155,12 +173,26 @@ function App(){
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
   const [picker,setPicker] = useState(null);
+  const [rooms,setRooms] = useState({});
+  const [fpNums,setFpNums] = useState({});
+  const [evacData,setEvacData] = useState({});
+  const [installable,setInstallable] = useState(!!window.deferredInstallPrompt);
+  const [installed,setInstalled] = useState(false);
 
   const [locsUnlocked,setLocsUnlocked] = useState(false);
   const [dragSrc,setDragSrc] = useState(null);
   const [dragOver,setDragOver] = useState(null);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
+
+  useEffect(()=>{
+    // Check if already installed
+    if(window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone){
+      setInstalled(true);
+    }
+    window.addEventListener('pwa-installable',()=>setInstallable(true));
+    window.addEventListener('appinstalled',()=>{setInstalled(true);setInstallable(false);});
+  },[]);
 
   useEffect(()=>{
     const clk = setInterval(()=>{setBhr(bhrNow());setZulu(zuluNow());},1000);
@@ -180,13 +212,19 @@ function App(){
       const data=snap.val()||{};
       setFuelCards(Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",location:"",...(data[i]||{})})));
     });
-    return()=>{ clearInterval(clk); db.ref("board").off(); db.ref("locations").off(); db.ref("locations2").off(); db.ref("statuses").off(); db.ref("vehicles").off(); db.ref("fuelcards").off(); };
+    db.ref("rooms").on("value",snap=>{ setRooms(snap.val()||{}); });
+    db.ref("fpnumbers").on("value",snap=>{ setFpNums(snap.val()||{}); });
+    db.ref("evac").on("value",snap=>{ setEvacData(snap.val()||{}); });
+    return()=>{ clearInterval(clk); db.ref("board").off(); db.ref("locations").off(); db.ref("locations2").off(); db.ref("statuses").off(); db.ref("vehicles").off(); db.ref("fuelcards").off(); db.ref("rooms").off(); db.ref("fpnumbers").off(); db.ref("evac").off(); };
   },[]);
 
   const wf = (i,field,value) => { const u={}; u[field]=value; db.ref("board/"+i).update(u); };
   const writeLocs = l => db.ref("locations").set(l);
   const writeStatuses = s => db.ref("statuses").set(s);
   const writeLocs2 = l => db.ref("locations2").set(l);
+  const writeRoom = (name,val) => db.ref("rooms/"+name.replace(/[^a-zA-Z0-9]/g,"_")).set(val);
+  const writeFP = (name,val) => db.ref("fpnumbers/"+name.replace(/[^a-zA-Z0-9]/g,"_")).set(val);
+  const writeEvac = (vehIdx,field,val) => { const u={}; u[field]=val; db.ref("evac/v"+vehIdx).update(u); };
   const writeVehicle = (i,f,v) => { const u={}; u[f]=v; db.ref("vehicles/"+i).update(u); };
   const writeFuelCard = (i,f,v) => { const u={}; u[f]=v; db.ref("fuelcards/"+i).update(u); };
   const writeAllRows = newRows => { const u={}; newRows.forEach((r,i)=>{u[i]={...r,id:i+1};}); db.ref("board").set(u); };
@@ -322,6 +360,10 @@ function App(){
         <button style={s.tab(tab==="vehicles")} onClick={()=>setTab("vehicles")}>Vehicles</button>
         <button style={s.tab(tab==="fuelcards")} onClick={()=>setTab("fuelcards")}>Fuel Cards</button>
         <a href="wh.html" style={{...s.tab(false),textDecoration:"none",display:"inline-block"}}>WH Shifts</a>
+        <button style={s.tab(tab==="install")} onClick={()=>setTab("install")}>📲 Install</button>
+        <button style={s.tab(tab==="rooms")} onClick={()=>setTab("rooms")}>Rooms</button>
+        <button style={s.tab(tab==="fp")} onClick={()=>setTab("fp")}>FP Numbers</button>
+        <button style={s.tab(tab==="evac")} onClick={()=>setTab("evac")}>EVAC Pac List</button>
       </div>
 
       <div style={s.body}>
@@ -468,7 +510,148 @@ function App(){
 
       </div>
 
+        {tab==="install"&&<>
+          <div style={{maxWidth:"400px"}}>
+            <div style={{...s.secT,marginTop:"0"}}>INSTALL APP</div>
+            {installed
+              ? <div style={{background:"rgba(46,204,113,0.08)",border:"1px solid rgba(46,204,113,0.3)",padding:"14px 16px",marginBottom:"16px"}}>
+                  <div style={{color:"#2ecc71",fontSize:"12px",letterSpacing:"2px",marginBottom:"6px"}}>✓ APP INSTALLED</div>
+                  <div style={{color:"#5a6a7a",fontSize:"11px",letterSpacing:"1px"}}>Moving & Tracking is installed on this device. Open it from your home screen.</div>
+                </div>
+              : <>
+                  {installable&&<>
+                    <div style={{color:"#5a6a7a",fontSize:"11px",letterSpacing:"1px",marginBottom:"14px",lineHeight:"1.7"}}>Tap the button below to install Moving & Tracking as an app on this device.</div>
+                    <button
+                      onClick={()=>{if(window.deferredInstallPrompt){window.deferredInstallPrompt.prompt();window.deferredInstallPrompt.userChoice.then(r=>{if(r.outcome==="accepted"){setInstalled(true);setInstallable(false);}});}}}
+                      style={{background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:f.mono,fontSize:"13px",letterSpacing:"2px",padding:"12px 24px",cursor:"pointer",width:"100%",marginBottom:"20px"}}
+                    >📲 INSTALL NOW</button>
+                  </>}
+                  <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"16px",marginBottom:"12px"}}>
+                    <div style={{color:"#c9a84c",fontSize:"10px",letterSpacing:"3px",marginBottom:"10px"}}>ANDROID — CHROME</div>
+                    <div style={{color:"#d4dde8",fontSize:"12px",lineHeight:"1.8",letterSpacing:"0.5px"}}>
+                      1. Tap the <span style={{color:"#c9a84c"}}>⋮</span> menu (top right)<br/>
+                      2. Tap <span style={{color:"#c9a84c"}}>"Add to Home screen"</span><br/>
+                      3. Tap <span style={{color:"#c9a84c"}}>"Install"</span>
+                    </div>
+                  </div>
+                  <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"16px"}}>
+                    <div style={{color:"#c9a84c",fontSize:"10px",letterSpacing:"3px",marginBottom:"10px"}}>iPHONE — SAFARI</div>
+                    <div style={{color:"#d4dde8",fontSize:"12px",lineHeight:"1.8",letterSpacing:"0.5px"}}>
+                      1. Tap the <span style={{color:"#c9a84c"}}>⎙ Share</span> button (bottom bar)<br/>
+                      2. Scroll down and tap <span style={{color:"#c9a84c"}}>"Add to Home Screen"</span><br/>
+                      3. Tap <span style={{color:"#c9a84c"}}>"Add"</span>
+                    </div>
+                  </div>
+                </>
+            }
+          </div>
+        </>}
+
       {picker&&<TimePicker time={picker.time} date={picker.date} onConfirm={(t,d)=>{updateRow(picker.idx,"dueBack",t);updateRow(picker.idx,"dueDate",d);setPicker(null);}} onClear={()=>{updateRow(picker.idx,"dueBack","");updateRow(picker.idx,"dueDate","");setPicker(null);}} onClose={()=>setPicker(null)}/>}
+
+        {/* ROOMS TAB */}
+        {tab==="rooms"&&<>
+          <div style={{...s.hint,marginBottom:"14px"}}>ROOM NUMBERS — MIRRORS BOARD NAMES</div>
+          <div style={s.tw}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>{["#","Name","Room Number"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {rows.filter(r=>r.name).map((r,i)=>{
+                  const key=r.name.replace(/[^a-zA-Z0-9]/g,"_");
+                  return <tr key={r.name} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
+                    <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
+                    <td style={{...s.td,minWidth:"160px"}}><span style={{color:"#fff",fontFamily:f.mono,fontSize:"12px",letterSpacing:"1px"}}>{r.name}</span></td>
+                    <td style={{...s.td,minWidth:"140px"}}>
+                      <input style={{...s.inp,textTransform:"none",letterSpacing:"1px"}} value={rooms[key]||""} placeholder="Room no." maxLength={20}
+                        onChange={e=>{const v=e.target.value;setRooms(prev=>({...prev,[key]:v}));writeRoom(r.name,v);}}/>
+                    </td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+          {rows.filter(r=>r.name).length===0&&<div style={{color:"#5a6a7a",fontSize:"11px",letterSpacing:"1px",padding:"20px 0"}}>No names on the board yet — add names in the Board tab first.</div>}
+        </>}
+
+        {/* FP NUMBERS TAB */}
+        {tab==="fp"&&<>
+          <div style={{...s.hint,marginBottom:"14px"}}>FP NUMBERS — FORCE PROTECTION PHONE NUMBERS</div>
+          <div style={s.tw}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>{["#","Name","FP Number"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {rows.filter(r=>r.name).map((r,i)=>{
+                  const key=r.name.replace(/[^a-zA-Z0-9]/g,"_");
+                  return <tr key={r.name} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
+                    <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
+                    <td style={{...s.td,minWidth:"160px"}}><span style={{color:"#fff",fontFamily:f.mono,fontSize:"12px",letterSpacing:"1px"}}>{r.name}</span></td>
+                    <td style={{...s.td,minWidth:"160px"}}>
+                      <input style={{...s.inp,textTransform:"none",letterSpacing:"2px"}} value={fpNums[key]||""} placeholder="FP number" maxLength={20}
+                        onChange={e=>{const v=e.target.value;setFpNums(prev=>({...prev,[key]:v}));writeFP(r.name,v);}}/>
+                    </td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+          {rows.filter(r=>r.name).length===0&&<div style={{color:"#5a6a7a",fontSize:"11px",letterSpacing:"1px",padding:"20px 0"}}>No names on the board yet — add names in the Board tab first.</div>}
+        </>}
+
+        {/* EVAC PAC LIST TAB */}
+        {tab==="evac"&&<>
+          <div style={{...s.hint,marginBottom:"14px"}}>EVAC VEHICLE PAC LIST — 10 VEHICLES</div>
+          {Array.from({length:10},(_,vi)=>{
+            const vd=evacData["v"+vi]||{};
+            const vehList=vehicles.filter(v=>v.vrn).map(v=>v.vrn+(v.make?" "+v.make:"")+(v.model?" "+v.model:""));
+            const nameList=rows.filter(r=>r.name).map(r=>r.name);
+            const selStyle=(val)=>({appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid "+(val?"#c9a84c55":"#1e2630"),color:val?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"});
+            const nameSelStyle=(val)=>({appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid "+(val?"#2ecc7155":"#1e2630"),color:val?"#2ecc71":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"});
+            return <div key={vi} style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"12px"}}>
+                <span style={{fontFamily:f.sans,fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>VEH {String(vi+1).padStart(2,"0")}</span>
+              </div>
+              <div style={{display:"flex",gap:"8px",marginBottom:"10px",alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"60px",fontFamily:f.mono}}>VEHICLE</span>
+                <select value={vd.vehicle||""} onChange={e=>writeEvac(vi,"vehicle",e.target.value)} style={{...selStyle(vd.vehicle),maxWidth:"280px"}}>
+                  <option value="">— SELECT VEHICLE —</option>
+                  {vehList.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div style={{display:"flex",gap:"8px",marginBottom:"10px",alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"60px",fontFamily:f.mono}}>DRIVER</span>
+                <select value={vd.driver||""} onChange={e=>writeEvac(vi,"driver",e.target.value)} style={{...nameSelStyle(vd.driver),maxWidth:"280px"}}>
+                  <option value="">— SELECT DRIVER —</option>
+                  {nameList.map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"8px",fontFamily:f.mono}}>PAX SEATS (3)</div>
+              <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                {[1,2,3].map(seat=>(
+                  <select key={seat} value={vd["pax"+seat]||""} onChange={e=>writeEvac(vi,"pax"+seat,e.target.value)} style={{...nameSelStyle(vd["pax"+seat]),minWidth:"130px",flex:"1"}}>
+                    <option value="">— PAX {seat} —</option>
+                    {nameList.map(n=><option key={n} value={n}>{n}</option>)}
+                  </select>
+                ))}
+              </div>
+            </div>;
+          })}
+        </>}
+
+      {/* Install popup - shows once, dismissed if already installed */}
+      {installable&&!installed&&tab!=="install"&&<InstallBanner onInstall={()=>{if(window.deferredInstallPrompt){window.deferredInstallPrompt.prompt();window.deferredInstallPrompt.userChoice.then(r=>{if(r.outcome==="accepted"){setInstalled(true);setInstallable(false);}});}}} onDismiss={()=>setInstallable(false)} f={f}/>}
+    </div>
+  );
+}
+
+function InstallBanner({onInstall,onDismiss,f}){
+  return (
+    <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0d1117",borderTop:"2px solid #c9a84c",padding:"12px 20px",display:"flex",alignItems:"center",gap:"12px",zIndex:999,flexWrap:"wrap"}}>
+      <div style={{flex:1,minWidth:"160px"}}>
+        <div style={{color:"#c9a84c",fontSize:"11px",letterSpacing:"2px",marginBottom:"2px",fontFamily:f.mono}}>📲 INSTALL AS APP</div>
+        <div style={{color:"#5a6a7a",fontSize:"10px",letterSpacing:"1px",fontFamily:f.mono}}>Add to home screen for quick access</div>
+      </div>
+      <button onClick={onInstall} style={{background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:f.mono,fontSize:"11px",letterSpacing:"2px",padding:"8px 16px",cursor:"pointer",whiteSpace:"nowrap"}}>INSTALL</button>
+      <button onClick={onDismiss} style={{background:"transparent",border:"none",color:"#5a6a7a",fontFamily:f.mono,fontSize:"16px",cursor:"pointer",padding:"4px 8px"}}>✕</button>
     </div>
   );
 }
