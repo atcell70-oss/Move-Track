@@ -660,6 +660,11 @@ function BahrainMap({f}){
 
     // Load KML from same repo — no CORS
     omnivore.kml('./bahrain.kml', null, L.geoJson(null,{
+      pointToLayer: ()=>null, // suppress all point markers
+      filter: feature=>{
+        const geom = feature.geometry&&feature.geometry.type||"";
+        return geom==="Polygon"||geom==="MultiPolygon"; // polygons only
+      },
       style: feature=>{
         const folder = (feature.properties&&feature.properties.folder)||"";
         if(folder.includes("Off_Limits")) return OFF_STYLE;
