@@ -598,49 +598,98 @@ function App(){
         </>}
 
         {/* EVAC PAC LIST TAB */}
-        {tab==="evac"&&<>
-          <div style={{...s.hint,marginBottom:"14px"}}>EVAC VEHICLE PAC LIST — 10 VEHICLES</div>
-          {Array.from({length:10},(_,vi)=>{
-            const vd=evacData["v"+vi]||{};
-            const vehList=vehicles.filter(v=>v.vrn).map(v=>v.vrn+(v.make?" "+v.make:"")+(v.model?" "+v.model:""));
-            const nameList=rows.filter(r=>r.name).map(r=>r.name);
-            const selStyle=(val)=>({appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid "+(val?"#c9a84c55":"#1e2630"),color:val?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"});
-            const nameSelStyle=(val)=>({appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid "+(val?"#2ecc7155":"#1e2630"),color:val?"#2ecc71":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"});
-            return <div key={vi} style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"10px",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"12px"}}>
-                <span style={{fontFamily:f.sans,fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>VEH {String(vi+1).padStart(2,"0")}</span>
-              </div>
-              <div style={{display:"flex",gap:"8px",marginBottom:"10px",alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"60px",fontFamily:f.mono}}>VEHICLE</span>
-                <select value={vd.vehicle||""} onChange={e=>writeEvac(vi,"vehicle",e.target.value)} style={{...selStyle(vd.vehicle),maxWidth:"280px"}}>
-                  <option value="">— SELECT VEHICLE —</option>
-                  {vehList.map(v=><option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-              <div style={{display:"flex",gap:"8px",marginBottom:"10px",alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"60px",fontFamily:f.mono}}>DRIVER</span>
-                <select value={vd.driver||""} onChange={e=>writeEvac(vi,"driver",e.target.value)} style={{...nameSelStyle(vd.driver),maxWidth:"280px"}}>
-                  <option value="">— SELECT DRIVER —</option>
-                  {nameList.map(n=><option key={n} value={n}>{n}</option>)}
-                </select>
-              </div>
-              <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"8px",fontFamily:f.mono}}>PAX SEATS (3)</div>
-              <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                {[1,2,3].map(seat=>(
-                  <select key={seat} value={vd["pax"+seat]||""} onChange={e=>writeEvac(vi,"pax"+seat,e.target.value)} style={{...nameSelStyle(vd["pax"+seat]),minWidth:"130px",flex:"1"}}>
-                    <option value="">— PAX {seat} —</option>
-                    {nameList.map(n=><option key={n} value={n}>{n}</option>)}
-                  </select>
-                ))}
-              </div>
-            </div>;
-          })}
-        </>}
+        {tab==="evac"&&<EvacTab evacData={evacData} writeEvac={writeEvac} vehicles={vehicles} rows={rows} f={f} s={s}/>}
 
       {/* Install popup - shows once, dismissed if already installed */}
       {installable&&!installed&&tab!=="install"&&<InstallBanner onInstall={()=>{if(window.deferredInstallPrompt){window.deferredInstallPrompt.prompt();window.deferredInstallPrompt.userChoice.then(r=>{if(r.outcome==="accepted"){setInstalled(true);setInstallable(false);}});}}} onDismiss={()=>setInstallable(false)} f={f}/>}
     </div>
   );
+}
+
+function EvacCard({vi,evacData,writeEvac,vehList,nameList,f}){
+  const vd = evacData["v"+vi]||{};
+  const [paxCount,setPaxCount] = React.useState(parseInt(vd.paxCount)||0);
+
+  const selV = (val)=>({appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid "+(val?"#c9a84c55":"#1e2630"),color:val?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",minWidth:"140px",borderRadius:"0"});
+  const selN = (val)=>({appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid "+(val?"#2ecc7155":"#1e2630"),color:val?"#2ecc71":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"100%",minWidth:"140px",borderRadius:"0"});
+  const selP = (val)=>({appearance:"none",WebkitAppearance:"none",background:"#080a0d",border:"1px solid "+(val?"#3498db55":"#1e2630"),color:val?"#3498db":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 7px",cursor:"pointer",outline:"none",width:"80px",borderRadius:"0"});
+  const lbl = {fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",minWidth:"65px",flexShrink:0,fontFamily:f.mono};
+  const row = {display:"flex",gap:"8px",marginBottom:"10px",alignItems:"center",flexWrap:"wrap"};
+
+  const handlePaxCount = (e)=>{
+    const n=parseInt(e.target.value)||0;
+    setPaxCount(n);
+    writeEvac(vi,"paxCount",String(n));
+    // Clear pax slots beyond new count
+    for(let i=n+1;i<=6;i++) writeEvac(vi,"pax"+i,"");
+  };
+
+  const totalOnBoard = 1 + paxCount; // driver + pax
+
+  return (
+    <div style={{background:"#0f1318",border:"1px solid #1e2630",padding:"14px 16px",marginBottom:"12px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #1e2630",paddingBottom:"10px",marginBottom:"12px",flexWrap:"wrap",gap:"8px"}}>
+        <span style={{fontFamily:f.sans,fontWeight:"900",fontSize:"22px",color:"#c9a84c",letterSpacing:"3px"}}>VEH {String(vi+1).padStart(2,"0")}</span>
+        {vd.vehicle&&<span style={{fontFamily:f.mono,fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px"}}>{vd.vehicle}</span>}
+        {totalOnBoard>1&&<span style={{background:"rgba(52,152,219,0.15)",border:"1px solid rgba(52,152,219,0.4)",color:"#3498db",fontFamily:f.mono,fontSize:"10px",padding:"3px 8px",letterSpacing:"1px"}}>{totalOnBoard} ON BOARD</span>}
+      </div>
+
+      <div style={row}>
+        <span style={lbl}>VEHICLE</span>
+        <select value={vd.vehicle||""} onChange={e=>writeEvac(vi,"vehicle",e.target.value)} style={selV(vd.vehicle)}>
+          <option value="">— SELECT VEHICLE —</option>
+          {vehList.map(v=><option key={v} value={v}>{v}</option>)}
+        </select>
+      </div>
+
+      <div style={row}>
+        <span style={lbl}>DRIVER</span>
+        <select value={vd.driver||""} onChange={e=>writeEvac(vi,"driver",e.target.value)} style={selN(vd.driver)}>
+          <option value="">— SELECT DRIVER —</option>
+          {nameList.map(n=><option key={n} value={n}>{n}</option>)}
+        </select>
+      </div>
+
+      <div style={row}>
+        <span style={lbl}>PAX COUNT</span>
+        <select value={String(paxCount)} onChange={handlePaxCount} style={selP(paxCount>0)}>
+          <option value="0">0</option>
+          {[1,2,3,4,5,6].map(n=><option key={n} value={String(n)}>{n}</option>)}
+        </select>
+        <span style={{fontSize:"10px",color:"#5a6a7a",fontFamily:f.mono,letterSpacing:"1px"}}>PAX SEATS</span>
+      </div>
+
+      {paxCount>0&&<>
+        <div style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",marginBottom:"8px",fontFamily:f.mono}}>PAX ({paxCount})</div>
+        <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+          {Array.from({length:paxCount},(_,si)=>(
+            <select key={si+1} value={vd["pax"+(si+1)]||""} onChange={e=>writeEvac(vi,"pax"+(si+1),e.target.value)} style={{...selN(vd["pax"+(si+1)]),minWidth:"130px",flex:"1"}}>
+              <option value="">— PAX {si+1} —</option>
+              {nameList.map(n=><option key={n} value={n}>{n}</option>)}
+            </select>
+          ))}
+        </div>
+      </>}
+    </div>
+  );
+}
+
+function EvacTab({evacData,writeEvac,vehicles,rows,f,s}){
+  const vehList=vehicles.filter(v=>v.vrn).map(v=>v.vrn+(v.make?" "+v.make:"")+(v.model?" "+v.model:""));
+  const nameList=rows.filter(r=>r.name).map(r=>r.name);
+  const totalOnBoard=Array.from({length:10},(_,vi)=>{
+    const vd=evacData["v"+vi]||{};
+    return 1+(parseInt(vd.paxCount)||0);
+  }).filter((_,vi)=>(evacData["v"+vi]||{}).vehicle).reduce((a,b)=>a+b,0);
+  return <>
+    <div style={{...s.hint,marginBottom:"6px"}}>EVAC VEHICLE PAC LIST — 10 VEHICLES</div>
+    {totalOnBoard>0&&<div style={{background:"rgba(52,152,219,0.08)",border:"1px solid rgba(52,152,219,0.3)",padding:"8px 14px",marginBottom:"14px",fontSize:"11px",color:"#3498db",fontFamily:f.mono,letterSpacing:"1px"}}>
+      TOTAL ON BOARD: {totalOnBoard} PERSONNEL ACROSS {Array.from({length:10}).filter((_,vi)=>(evacData["v"+vi]||{}).vehicle).length} VEHICLES
+    </div>}
+    {Array.from({length:10},(_,vi)=>(
+      <EvacCard key={vi} vi={vi} evacData={evacData} writeEvac={writeEvac} vehList={vehList} nameList={nameList} f={f}/>
+    ))}
+  </>;
 }
 
 function InstallBanner({onInstall,onDismiss,f}){
