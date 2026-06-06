@@ -35,6 +35,7 @@ window.addEventListener('beforeinstallprompt', function(e){
 </script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 .leaflet-container{background:#0d1f2d!important}
@@ -619,166 +620,158 @@ function App(){
 function BahrainMap({f}){
   const mapRef = React.useRef(null);
   const mapInstanceRef = React.useRef(null);
-  const layersRef = React.useRef({});
-  const [loading,setLoading] = React.useState(true);
-  const [loadMsg,setLoadMsg] = React.useState("Fetching district boundaries...");
+  const layersRef = React.useRef([]);
   const [selected,setSelected] = React.useState(null);
-  const [loaded,setLoaded] = React.useState([]);
+  const [status,setStatus] = React.useState("loading");
+  const [regions,setRegions] = React.useState([]);
   const fnt = f.mono;
 
-  // All districts to load — search query : display name
-  const DISTRICTS = [
-    {q:"Manama, Bahrain",          name:"Manama"},
-    {q:"Muharraq, Bahrain",        name:"Muharraq"},
-    {q:"Seef District, Bahrain",   name:"Seef"},
-    {q:"Jidhafs, Bahrain",         name:"Jidhafs"},
-    {q:"Budaiya, Bahrain",         name:"Budaiya"},
-    {q:"Salmabad, Bahrain",        name:"Salmabad"},
-    {q:"Isa Town, Bahrain",        name:"Isa Town"},
-    {q:"Sitra, Bahrain",           name:"Sitra"},
-    {q:"Riffa, Bahrain",           name:"Riffa"},
-    {q:"Hamala, Bahrain",          name:"Hamala"},
-    {q:"Malkiya, Bahrain",         name:"Malkiya"},
-    {q:"Awali, Bahrain",           name:"Awali"},
-    {q:"Zallaq, Bahrain",          name:"Zallaq"},
-    {q:"Askar, Bahrain",           name:"Askar"},
-    {q:"Jaww, Bahrain",            name:"Jaww"},
-    {q:"Al Dur, Bahrain",          name:"Al Dur"},
-    {q:"Galali, Bahrain",          name:"Galali"},
-    {q:"Arad, Bahrain",            name:"Arad"},
-    {q:"Al Hadd, Bahrain",         name:"Al Hadd"},
-    {q:"Hamad Town, Bahrain",      name:"Hamad Town"},
-    {q:"Tubli, Bahrain",           name:"Tubli"},
-    {q:"Hidd, Bahrain",            name:"Hidd"},
-    {q:"Um Al Naasan, Bahrain",    name:"Um Al Naasan"},
-  ];
+  const KML_URL = "https://www.google.com/maps/d/kml?mid=15VSw1WqdDSDCZRQWL82onCwYu-em1QE&forcekml=1";
 
-  const SEL_STYLE   = {color:"#c9a84c",weight:3,fillColor:"rgba(201,168,76,0.4)",fillOpacity:0.55,opacity:1};
-  const DEF_STYLE   = {color:"#2ecc71",weight:1.5,fillColor:"rgba(46,204,113,0.15)",fillOpacity:0.35,opacity:0.8};
-  const HOVER_STYLE = {color:"#2ecc71",weight:2,fillColor:"rgba(46,204,113,0.3)",fillOpacity:0.45,opacity:1};
+  const DEF_STYLE = {color:"#2ecc71",weight:1.5,fillColor:"#2ecc71",fillOpacity:0.15,opacity:0.8};
+  const SEL_STYLE = {color:"#c9a84c",weight:3,fillColor:"#c9a84c",fillOpacity:0.45,opacity:1};
+  const HOV_STYLE = {color:"#2ecc71",weight:2,fillColor:"#2ecc71",fillOpacity:0.3,opacity:1};
 
-  const delay = ms => new Promise(res=>setTimeout(res,ms));
+  const resetAll = () => layersRef.current.forEach(({layer})=>layer.setStyle(DEF_STYLE));
 
-  const selectRegion = (name) => {
-    Object.entries(layersRef.current).forEach(([n,layer])=>{
-      layer.setStyle(n===name ? SEL_STYLE : DEF_STYLE);
-      if(n===name) layer.bringToFront();
-    });
+  const selectRegion = (name,layer,map)=>{
+    resetAll();
+    layer.setStyle(SEL_STYLE);
+    layer.bringToFront();
     setSelected(name);
+    if(map){
+      try{ map.fitBounds(layer.getBounds(),{padding:[30,30],maxZoom:14}); }catch(e){}
+    }
   };
 
   React.useEffect(()=>{
-    if(!mapRef.current || mapInstanceRef.current) return;
+    if(!mapRef.current||mapInstanceRef.current) return;
 
     const map = L.map(mapRef.current,{
       center:[26.07,50.54],
       zoom:10,
       zoomControl:true,
+      tap:true,
+      touchZoom:true,
+      dragging:true,
     });
     mapInstanceRef.current = map;
 
+    // Dark tile layer
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
       maxZoom:19,subdomains:'abcd',
-      attribution:'© OpenStreetMap contributors © CARTO'
+      attribution:'© OpenStreetMap © CARTO'
     }).addTo(map);
 
-    // Fetch districts sequentially with delay to respect Nominatim rate limit
-    (async()=>{
-      const done = [];
-      for(let i=0;i<DISTRICTS.length;i++){
-        const d = DISTRICTS[i];
-        setLoadMsg("Loading "+d.name+"... ("+(i+1)+"/"+DISTRICTS.length+")");
-        try {
-          const url = "https://nominatim.openstreetmap.org/search?q="+encodeURIComponent(d.q)+"&format=geojson&polygon_geojson=1&limit=1";
-          const res = await fetch(url,{headers:{"Accept-Language":"en"}});
-          const gj = await res.json();
-          if(gj.features && gj.features.length>0){
-            const feat = gj.features[0];
-            const geom = feat.geometry;
-            // Only use polygon/multipolygon results
-            if(geom.type==="Polygon"||geom.type==="MultiPolygon"){
-              const layer = L.geoJSON(feat,{style:DEF_STYLE}).addTo(map);
-              // Hover effects
-              layer.on('mouseover',()=>{ if(selected!==d.name) layer.setStyle(HOVER_STYLE); });
-              layer.on('mouseout',()=>{ if(selected!==d.name) layer.setStyle(DEF_STYLE); });
-              layer.on('click',()=>{
-                selectRegion(d.name);
-                map.fitBounds(layer.getBounds(),{padding:[30,30]});
-              });
-              // Add label at centroid
-              const bounds = layer.getBounds();
-              const center = bounds.getCenter();
-              const labelIcon = L.divIcon({
-                className:'',
-                html:'<div style="color:#d4dde8;font-family:Share Tech Mono,monospace;font-size:9px;font-weight:bold;text-shadow:0 0 3px #000,0 0 3px #000,0 0 3px #000;white-space:nowrap;letter-spacing:1px;pointer-events:none">'+d.name.toUpperCase()+'</div>',
-                iconAnchor:[30,6],
-              });
-              L.marker(center,{icon:labelIcon,interactive:false}).addTo(map);
-              layersRef.current[d.name] = layer;
-              done.push(d.name);
-              setLoaded([...done]);
-            }
-          }
-        } catch(e){ console.warn("Failed to load",d.name,e); }
-        await delay(350); // Nominatim rate limit: max 1 req/sec
-      }
-      setLoading(false);
-      setLoadMsg("");
-    })();
+    // Load KML from Google My Maps via omnivore
+    const kmlLayer = omnivore.kml(KML_URL, null, L.geoJson(null,{
+      style: DEF_STYLE,
+      onEachFeature:(feature,layer)=>{
+        const name = feature.properties && (
+          feature.properties.name ||
+          feature.properties.Name ||
+          feature.properties.NAME ||
+          "Region"
+        );
 
-    return()=>{ if(mapInstanceRef.current){mapInstanceRef.current.remove();mapInstanceRef.current=null;layersRef.current={};} };
+        // Style each polygon
+        if(layer.setStyle) layer.setStyle(DEF_STYLE);
+
+        // Hover
+        layer.on('mouseover',()=>{ if(selected!==name) layer.setStyle(HOV_STYLE); });
+        layer.on('mouseout',()=>{ if(selected!==name) layer.setStyle(DEF_STYLE); });
+
+        // Click
+        layer.on('click',()=>selectRegion(name,layer,map));
+
+        // Label at centroid
+        try{
+          const bounds = layer.getBounds ? layer.getBounds() : null;
+          if(bounds){
+            const center = bounds.getCenter();
+            const icon = L.divIcon({
+              className:'',
+              html:'<div style="color:#fff;font-family:Share Tech Mono,monospace;font-size:9px;font-weight:bold;text-shadow:0 0 4px #000,0 0 4px #000;white-space:nowrap;pointer-events:none;letter-spacing:1px;transform:translateX(-50%)">'+name.toUpperCase()+'</div>',
+              iconSize:[0,0],iconAnchor:[0,0],
+            });
+            L.marker(center,{icon,interactive:false}).addTo(map);
+          }
+        }catch(e){}
+
+        layersRef.current.push({name,layer});
+      }
+    }))
+    .on('ready',()=>{
+      const names=[...new Set(layersRef.current.map(l=>l.name))].sort();
+      setRegions(names);
+      setStatus("ready");
+      // Fit to loaded data
+      try{ map.fitBounds(kmlLayer.getBounds(),{padding:[10,10]}); }catch(e){}
+    })
+    .on('error',()=>{
+      setStatus("error");
+    })
+    .addTo(map);
+
+    return()=>{
+      if(mapInstanceRef.current){
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current=null;
+        layersRef.current=[];
+      }
+    };
   },[]);
 
   return (
     <div>
+      {/* Header */}
       <div style={{marginBottom:"10px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
-        <div style={{fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px",fontFamily:fnt}}>BAHRAIN DISTRICT MAP — REAL OSM BOUNDARIES</div>
-        {loading&&<div style={{color:"#c9a84c",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>⟳ {loadMsg}</div>}
-        {!loading&&<div style={{color:"#2ecc71",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>✓ {loaded.length} DISTRICTS LOADED</div>}
+        <div style={{fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px",fontFamily:fnt}}>BAHRAIN REGION MAP — TAP REGION TO HIGHLIGHT</div>
+        {status==="loading"&&<div style={{color:"#c9a84c",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>⟳ LOADING YOUR MAP DATA...</div>}
+        {status==="ready"&&<div style={{color:"#2ecc71",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>✓ {regions.length} REGIONS LOADED</div>}
+        {status==="error"&&<div style={{color:"#e74c3c",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>⚠ COULD NOT LOAD MAP — CHECK INTERNET</div>}
       </div>
 
+      {/* Selected region banner */}
       {selected&&(
         <div style={{background:"rgba(201,168,76,0.08)",border:"1px solid #c9a84c",padding:"10px 16px",marginBottom:"10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div style={{color:"#c9a84c",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",fontSize:"20px",letterSpacing:"3px"}}>{selected.toUpperCase()}</div>
-          <button onClick={()=>{
-            Object.values(layersRef.current).forEach(l=>l.setStyle(DEF_STYLE));
-            setSelected(null);
-          }} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px"}}>✕</button>
+          <button onClick={()=>{resetAll();setSelected(null);}} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px"}}>✕</button>
         </div>
       )}
 
-      <div ref={mapRef} style={{height:"520px",border:"1px solid #1e2630",width:"100%"}}/>
+      {/* Map */}
+      <div ref={mapRef} style={{height:"520px",border:"1px solid #1e2630",width:"100%",touchAction:"manipulation"}}/>
 
-      <div style={{marginTop:"12px"}}>
-        <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"8px",fontFamily:fnt}}>
-          DISTRICTS — TAP TO ZOOM & HIGHLIGHT
+      {/* Region buttons */}
+      {regions.length>0&&(
+        <div style={{marginTop:"12px"}}>
+          <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"8px",fontFamily:fnt}}>
+            REGIONS ({regions.length}) — TAP TO ZOOM & HIGHLIGHT
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+            {regions.map(name=>{
+              const isSel=selected===name;
+              return(
+                <button key={name}
+                  onClick={()=>{
+                    const found=layersRef.current.find(l=>l.name===name);
+                    if(found&&mapInstanceRef.current) selectRegion(name,found.layer,mapInstanceRef.current);
+                  }}
+                  style={{
+                    background:isSel?"rgba(201,168,76,0.2)":"#0f1318",
+                    border:"1px solid "+(isSel?"#c9a84c":"#2ecc7144"),
+                    color:isSel?"#c9a84c":"#d4dde8",
+                    fontFamily:fnt,fontSize:"11px",letterSpacing:"1px",
+                    padding:"6px 12px",cursor:"pointer",
+                  }}>
+                  {name}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
-          {DISTRICTS.map(d=>{
-            const isLoaded = loaded.includes(d.name);
-            const isSel = selected===d.name;
-            return (
-              <button key={d.name}
-                onClick={()=>{
-                  if(!isLoaded||!layersRef.current[d.name]||!mapInstanceRef.current) return;
-                  selectRegion(d.name);
-                  mapInstanceRef.current.fitBounds(layersRef.current[d.name].getBounds(),{padding:[30,30]});
-                }}
-                style={{
-                  background:isSel?"rgba(201,168,76,0.2)":"#0f1318",
-                  border:"1px solid "+(isSel?"#c9a84c":isLoaded?"#2ecc7144":"#1e2630"),
-                  color:isSel?"#c9a84c":isLoaded?"#d4dde8":"#3a4a5a",
-                  fontFamily:fnt,fontSize:"11px",letterSpacing:"1px",
-                  padding:"5px 10px",cursor:isLoaded?"pointer":"default",
-                  opacity:isLoaded?1:0.5,
-                }}>
-                {d.name}
-                {!isLoaded&&loading&&<span style={{color:"#c9a84c",marginLeft:"4px",fontSize:"9px"}}>⟳</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
