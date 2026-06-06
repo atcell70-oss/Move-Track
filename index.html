@@ -623,148 +623,179 @@ function BahrainMap({f}){
   const layersRef = React.useRef([]);
   const [selected,setSelected] = React.useState(null);
   const [status,setStatus] = React.useState("loading");
-  const [regions,setRegions] = React.useState([]);
+  const [districts,setDistricts] = React.useState([]);
+  const [showOffLimits,setShowOffLimits] = React.useState(true);
+  const [showNight,setShowNight] = React.useState(true);
+  const offLimitsLayerRef = React.useRef(null);
+  const nightLayerRef = React.useRef(null);
   const fnt = f.mono;
 
-  const KML_URL = "https://www.google.com/maps/d/kml?mid=15VSw1WqdDSDCZRQWL82onCwYu-em1QE&forcekml=1";
+  const DEF_STYLE  = {color:"#2ecc71",weight:1.5,fillColor:"#2ecc71",fillOpacity:0.08,opacity:0.7};
+  const SEL_STYLE  = {color:"#c9a84c",weight:3,fillColor:"#c9a84c",fillOpacity:0.4,opacity:1};
+  const HOV_STYLE  = {color:"#2ecc71",weight:2.5,fillColor:"#2ecc71",fillOpacity:0.25,opacity:1};
+  const OFF_STYLE  = {color:"#e74c3c",weight:1.5,fillColor:"#e74c3c",fillOpacity:0.35,opacity:0.9};
+  const NIGHT_STYLE= {color:"#f39c12",weight:1.5,fillColor:"#f39c12",fillOpacity:0.3,opacity:0.9};
 
-  const DEF_STYLE = {color:"#2ecc71",weight:1.5,fillColor:"#2ecc71",fillOpacity:0.15,opacity:0.8};
-  const SEL_STYLE = {color:"#c9a84c",weight:3,fillColor:"#c9a84c",fillOpacity:0.45,opacity:1};
-  const HOV_STYLE = {color:"#2ecc71",weight:2,fillColor:"#2ecc71",fillOpacity:0.3,opacity:1};
+  const resetAll = ()=>layersRef.current.forEach(({layer})=>layer.setStyle(DEF_STYLE));
 
-  const resetAll = () => layersRef.current.forEach(({layer})=>layer.setStyle(DEF_STYLE));
-
-  const selectRegion = (name,layer,map)=>{
+  const selectDistrict = (name,layer,map)=>{
     resetAll();
     layer.setStyle(SEL_STYLE);
     layer.bringToFront();
     setSelected(name);
-    if(map){
-      try{ map.fitBounds(layer.getBounds(),{padding:[30,30],maxZoom:14}); }catch(e){}
-    }
+    if(map){ try{ map.fitBounds(layer.getBounds(),{padding:[40,40],maxZoom:14}); }catch(e){} }
   };
 
   React.useEffect(()=>{
     if(!mapRef.current||mapInstanceRef.current) return;
-
     const map = L.map(mapRef.current,{
-      center:[26.07,50.54],
-      zoom:10,
-      zoomControl:true,
-      tap:true,
-      touchZoom:true,
-      dragging:true,
+      center:[26.07,50.54],zoom:10,
+      zoomControl:true,tap:true,touchZoom:true,dragging:true,
     });
     mapInstanceRef.current = map;
 
-    // Dark tile layer
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-      maxZoom:19,subdomains:'abcd',
-      attribution:'© OpenStreetMap © CARTO'
+      maxZoom:19,subdomains:'abcd',attribution:'© OSM © CARTO'
     }).addTo(map);
 
-    // Load KML from Google My Maps via omnivore
-    const kmlLayer = omnivore.kml(KML_URL, null, L.geoJson(null,{
-      style: DEF_STYLE,
+    // Load KML from same repo — no CORS
+    omnivore.kml('./bahrain.kml', null, L.geoJson(null,{
+      style: feature=>{
+        const folder = (feature.properties&&feature.properties.folder)||"";
+        if(folder.includes("Off_Limits")) return OFF_STYLE;
+        if(folder.includes("Night")) return NIGHT_STYLE;
+        return DEF_STYLE;
+      },
       onEachFeature:(feature,layer)=>{
-        const name = feature.properties && (
-          feature.properties.name ||
-          feature.properties.Name ||
-          feature.properties.NAME ||
-          "Region"
-        );
+        const folder = (feature.properties&&(feature.properties.folder||feature.properties.Folder))||"";
+        const name = (feature.properties&&(feature.properties.name||feature.properties.Name))||"";
 
-        // Style each polygon
-        if(layer.setStyle) layer.setStyle(DEF_STYLE);
-
-        // Hover
+        if(folder.includes("Off_Limits")){
+          layer.setStyle(OFF_STYLE);
+          layer.bindTooltip('<div style="font-family:Share Tech Mono,monospace;color:#e74c3c;font-size:11px;font-weight:bold">🔴 OFF LIMITS<br/>'+name+'</div>',{sticky:true});
+          if(!offLimitsLayerRef.current) offLimitsLayerRef.current = L.layerGroup();
+          offLimitsLayerRef.current.addLayer(layer);
+          return;
+        }
+        if(folder.includes("Night")){
+          layer.setStyle(NIGHT_STYLE);
+          layer.bindTooltip('<div style="font-family:Share Tech Mono,monospace;color:#f39c12;font-size:11px;font-weight:bold">🟡 NIGHT RESTRICTION<br/>'+name+'<br/><span style="font-size:10px">1900-0500</span></div>',{sticky:true});
+          if(!nightLayerRef.current) nightLayerRef.current = L.layerGroup();
+          nightLayerRef.current.addLayer(layer);
+          return;
+        }
+        // District boundary
+        if(!name) return;
+        layer.setStyle(DEF_STYLE);
         layer.on('mouseover',()=>{ if(selected!==name) layer.setStyle(HOV_STYLE); });
         layer.on('mouseout',()=>{ if(selected!==name) layer.setStyle(DEF_STYLE); });
-
-        // Click
-        layer.on('click',()=>selectRegion(name,layer,map));
-
-        // Label at centroid
-        try{
-          const bounds = layer.getBounds ? layer.getBounds() : null;
-          if(bounds){
-            const center = bounds.getCenter();
-            const icon = L.divIcon({
-              className:'',
-              html:'<div style="color:#fff;font-family:Share Tech Mono,monospace;font-size:9px;font-weight:bold;text-shadow:0 0 4px #000,0 0 4px #000;white-space:nowrap;pointer-events:none;letter-spacing:1px;transform:translateX(-50%)">'+name.toUpperCase()+'</div>',
-              iconSize:[0,0],iconAnchor:[0,0],
-            });
-            L.marker(center,{icon,interactive:false}).addTo(map);
-          }
-        }catch(e){}
-
+        layer.on('click',()=>selectDistrict(name,layer,map));
         layersRef.current.push({name,layer});
       }
     }))
-    .on('ready',()=>{
+    .on('ready',function(){
+      // Add off-limits and night layers on top
+      if(offLimitsLayerRef.current) offLimitsLayerRef.current.addTo(map);
+      if(nightLayerRef.current) nightLayerRef.current.addTo(map);
+
+      // Build district list
       const names=[...new Set(layersRef.current.map(l=>l.name))].sort();
-      setRegions(names);
+      setDistricts(names);
       setStatus("ready");
-      // Fit to loaded data
-      try{ map.fitBounds(kmlLayer.getBounds(),{padding:[10,10]}); }catch(e){}
+
+      // Add labels for districts
+      layersRef.current.forEach(({name,layer})=>{
+        try{
+          const c=layer.getBounds().getCenter();
+          const icon=L.divIcon({
+            className:'',
+            html:'<div style="color:#d4dde8;font-family:Share Tech Mono,monospace;font-size:8px;font-weight:bold;text-shadow:0 0 3px #000,0 0 3px #000;white-space:nowrap;pointer-events:none;transform:translateX(-50%);letter-spacing:.5px">'+name+'</div>',
+            iconSize:[0,0],iconAnchor:[0,0],
+          });
+          L.marker(c,{icon,interactive:false}).addTo(map);
+        }catch(e){}
+      });
+
+      // Fit to Bahrain
+      try{ map.fitBounds(this.getBounds(),{padding:[10,10]}); }catch(e){}
     })
-    .on('error',()=>{
-      setStatus("error");
-    })
+    .on('error',()=>setStatus("error"))
     .addTo(map);
 
     return()=>{
-      if(mapInstanceRef.current){
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current=null;
-        layersRef.current=[];
-      }
+      if(mapInstanceRef.current){mapInstanceRef.current.remove();mapInstanceRef.current=null;layersRef.current=[];}
     };
   },[]);
 
+  // Toggle off-limits layer
+  React.useEffect(()=>{
+    if(!mapInstanceRef.current||!offLimitsLayerRef.current) return;
+    if(showOffLimits) offLimitsLayerRef.current.addTo(mapInstanceRef.current);
+    else offLimitsLayerRef.current.remove();
+  },[showOffLimits]);
+
+  // Toggle night layer
+  React.useEffect(()=>{
+    if(!mapInstanceRef.current||!nightLayerRef.current) return;
+    if(showNight) nightLayerRef.current.addTo(mapInstanceRef.current);
+    else nightLayerRef.current.remove();
+  },[showNight]);
+
+  const toggleBtn = (active,onClick,color,label) => (
+    <button onClick={onClick} style={{background:active?color+"22":"#0f1318",border:"1px solid "+(active?color:"#1e2630"),color:active?color:"#5a6a7a",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px",padding:"5px 10px",cursor:"pointer"}}>
+      {label}
+    </button>
+  );
+
   return (
     <div>
-      {/* Header */}
       <div style={{marginBottom:"10px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
-        <div style={{fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px",fontFamily:fnt}}>BAHRAIN REGION MAP — TAP REGION TO HIGHLIGHT</div>
-        {status==="loading"&&<div style={{color:"#c9a84c",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>⟳ LOADING YOUR MAP DATA...</div>}
-        {status==="ready"&&<div style={{color:"#2ecc71",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>✓ {regions.length} REGIONS LOADED</div>}
-        {status==="error"&&<div style={{color:"#e74c3c",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>⚠ COULD NOT LOAD MAP — CHECK INTERNET</div>}
+        <div style={{fontSize:"11px",color:"#5a6a7a",letterSpacing:"1px",fontFamily:fnt}}>BAHRAIN OPERATIONAL MAP</div>
+        {status==="loading"&&<div style={{color:"#c9a84c",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>⟳ LOADING...</div>}
+        {status==="ready"&&<div style={{color:"#2ecc71",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>✓ {districts.length} DISTRICTS</div>}
+        {status==="error"&&<div style={{color:"#e74c3c",fontFamily:fnt,fontSize:"10px",letterSpacing:"1px"}}>⚠ bahrain.kml not found in repo</div>}
       </div>
 
-      {/* Selected region banner */}
+      {/* Layer toggles */}
+      <div style={{display:"flex",gap:"8px",marginBottom:"10px",flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:"9px",color:"#5a6a7a",letterSpacing:"2px",fontFamily:fnt}}>LAYERS:</span>
+        {toggleBtn(true,()=>{},"#2ecc71","🟢 DISTRICTS")}
+        {toggleBtn(showOffLimits,()=>setShowOffLimits(v=>!v),"#e74c3c","🔴 OFF LIMITS")}
+        {toggleBtn(showNight,()=>setShowNight(v=>!v),"#f39c12","🟡 NIGHT RESTRICTION 1900-0500")}
+      </div>
+
+      {/* Legend */}
+      <div style={{display:"flex",gap:"16px",marginBottom:"10px",flexWrap:"wrap"}}>
+        {[["#2ecc71","District boundaries"],["#e74c3c","Off-limits (avoid)"],["#f39c12","Night restriction 1900-0500"]].map(([c,l])=>(
+          <div key={l} style={{display:"flex",alignItems:"center",gap:"6px"}}>
+            <div style={{width:"12px",height:"12px",background:c+"44",border:"2px solid "+c,flexShrink:0}}/>
+            <span style={{fontSize:"10px",color:"#8a9aaa",fontFamily:fnt,letterSpacing:"1px"}}>{l}</span>
+          </div>
+        ))}
+      </div>
+
       {selected&&(
         <div style={{background:"rgba(201,168,76,0.08)",border:"1px solid #c9a84c",padding:"10px 16px",marginBottom:"10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{color:"#c9a84c",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",fontSize:"20px",letterSpacing:"3px"}}>{selected.toUpperCase()}</div>
+          <div style={{color:"#c9a84c",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",fontSize:"20px",letterSpacing:"3px"}}>{selected}</div>
           <button onClick={()=>{resetAll();setSelected(null);}} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px"}}>✕</button>
         </div>
       )}
 
-      {/* Map */}
       <div ref={mapRef} style={{height:"520px",border:"1px solid #1e2630",width:"100%",touchAction:"manipulation"}}/>
 
-      {/* Region buttons */}
-      {regions.length>0&&(
+      {districts.length>0&&(
         <div style={{marginTop:"12px"}}>
-          <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"8px",fontFamily:fnt}}>
-            REGIONS ({regions.length}) — TAP TO ZOOM & HIGHLIGHT
-          </div>
+          <div style={{fontSize:"10px",color:"#c9a84c",letterSpacing:"3px",marginBottom:"8px",fontFamily:fnt}}>DISTRICTS — TAP TO ZOOM & HIGHLIGHT</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
-            {regions.map(name=>{
+            {districts.map(name=>{
               const isSel=selected===name;
               return(
                 <button key={name}
                   onClick={()=>{
                     const found=layersRef.current.find(l=>l.name===name);
-                    if(found&&mapInstanceRef.current) selectRegion(name,found.layer,mapInstanceRef.current);
+                    if(found&&mapInstanceRef.current) selectDistrict(name,found.layer,mapInstanceRef.current);
                   }}
-                  style={{
-                    background:isSel?"rgba(201,168,76,0.2)":"#0f1318",
-                    border:"1px solid "+(isSel?"#c9a84c":"#2ecc7144"),
-                    color:isSel?"#c9a84c":"#d4dde8",
-                    fontFamily:fnt,fontSize:"11px",letterSpacing:"1px",
-                    padding:"6px 12px",cursor:"pointer",
-                  }}>
+                  style={{background:isSel?"rgba(201,168,76,0.2)":"#0f1318",border:"1px solid "+(isSel?"#c9a84c":"#2ecc7133"),color:isSel?"#c9a84c":"#d4dde8",fontFamily:fnt,fontSize:"11px",letterSpacing:"1px",padding:"5px 10px",cursor:"pointer"}}>
                   {name}
                 </button>
               );
