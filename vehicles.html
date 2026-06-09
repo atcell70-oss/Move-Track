@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vehicle Register — Moving & Tracking</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080a0d;color:#d4dde8;font-family:'Share Tech Mono',monospace;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025)1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025)1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding-bottom:40px}
+header{background:#0d1117;border-bottom:2px solid #c9a84c;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.title{font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:26px;letter-spacing:5px;color:#fff;text-transform:uppercase}
+.title b{color:#c9a84c}
+.sub{font-size:9px;color:#5a6a7a;letter-spacing:3px;margin-top:3px;text-transform:uppercase}
+.body{padding:14px 20px}
+.tw{background:#0f1318;border:1px solid #1e2630;overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+thead tr{background:#0d1117;border-bottom:1px solid #7a6330}
+th{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#c9a84c;padding:10px 12px;text-align:left;font-weight:normal;white-space:nowrap}
+tbody tr{border-bottom:1px solid rgba(30,38,48,0.7)}
+td{padding:8px 12px;vertical-align:middle}
+.nc{color:#5a6a7a;font-size:11px;width:32px}
+input.ni{background:transparent;border:none;border-bottom:1px solid #1e2630;color:#fff;font-family:'Share Tech Mono',monospace;font-size:12px;padding:3px 4px;outline:none;width:100%;min-width:90px;text-transform:uppercase}
+select{-webkit-appearance:none;appearance:none;font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 7px;cursor:pointer;outline:none;border-radius:0;border:1px solid #1e2630;background:#080a0d;color:#5a6a7a;width:100%;min-width:110px}
+.welfare-badge{background:rgba(46,204,113,0.15);border:1px solid rgba(46,204,113,0.4);color:#2ecc71;font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 8px;letter-spacing:1px;display:flex;align-items:center;gap:6px}
+.date-btn{background:#080a0d;border:1px solid #1e2630;color:#5a6a7a;font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 8px;cursor:pointer;letter-spacing:1px;min-width:90px;text-align:center}
+.date-btn.has-val{border-color:#c9a84c55;color:#c9a84c}
+.km-wrap{display:flex;align-items:center;gap:4px}
+.km-btn{background:#0f1318;border:1px solid #1e2630;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:14px;padding:3px 8px;cursor:pointer;flex-shrink:0}
+.km-inp{background:transparent;border:none;border-bottom:1px solid #1e2630;color:#fff;font-family:'Share Tech Mono',monospace;font-size:11px;padding:3px 4px;outline:none;width:60px;text-align:center}
+.km-lbl{font-size:9px;color:#5a6a7a;flex-shrink:0}
+/* DATE PICKER */
+#datepicker{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
+#datepicker.show{display:flex}
+.dpbox{background:#0f1318;border:1px solid #c9a84c;width:100%;max-width:380px}
+.dphdr{background:#0d1117;border-bottom:1px solid #7a6330;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+.dptitle{color:#c9a84c;font-size:11px;letter-spacing:3px}
+.dpdisplay{text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:#c9a84c;letter-spacing:4px;margin-bottom:16px}
+.dpbody{padding:16px 20px}
+.dplbl{font-size:9px;color:#5a6a7a;letter-spacing:3px;margin-bottom:8px;font-family:'Share Tech Mono',monospace}
+.dpgrid{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
+.dpbtn{background:#080a0d;border:1px solid #1e2630;color:#5a6a7a;font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 7px;cursor:pointer;min-width:36px}
+.dpbtn.on{background:rgba(201,168,76,0.2);border-color:#c9a84c;color:#c9a84c}
+.dpactions{display:flex;gap:8px}
+.dp-clear{flex:1;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.4);color:#e74c3c;font-family:'Share Tech Mono',monospace;font-size:12px;letter-spacing:2px;padding:10px;cursor:pointer}
+.dp-confirm{flex:2;background:rgba(201,168,76,0.15);border:1px solid #c9a84c;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;letter-spacing:2px;padding:10px;cursor:pointer}
+footer{margin-top:16px;padding-top:10px;border-top:1px solid #1e2630;font-size:10px;color:#5a6a7a;letter-spacing:1px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px}
+#conn{text-align:center;padding:60px;color:#5a6a7a;font-size:12px;letter-spacing:3px}
+.spin{width:30px;height:30px;border:2px solid #1e2630;border-top-color:#c9a84c;border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 16px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="title">MOVING <b>&</b> TRACKING</div>
+      <div class="sub">Vehicle Register // MTO Live View — Read Only</div>
+    </div>
+    <div style="text-align:right"><div style="color:#c9a84c;font-size:11px;letter-spacing:2px;font-family:'Share Tech Mono',monospace" id="veh-count">— VEHICLES</div><div style="color:#3498db;font-size:9px;letter-spacing:2px;font-family:'Share Tech Mono',monospace;margin-top:3px">👁 VIEW ONLY — LIVE DATA</div></div>
+  </header>
+  <div class="body">
+    <div id="conn"><div class="spin"></div>CONNECTING TO DATABASE...</div>
+    <div id="main" style="display:none">
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Make</th><th>Model</th><th>Colour</th><th>VRN</th>
+              <th>Name / User</th><th>Location</th><th>Purpose</th>
+              <th>Date Taken On</th><th>KM On Taking</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <footer><span style="color:#2ecc71">⬤ LIVE</span><span>MTO VEHICLE REGISTER</span></footer>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
+var db=firebase.database();
+
+var WELFARE_VRNS=["131432","421630","421590"];
+var PURPOSES=["","TASKING","WELFARE","TRANSPORT","EVAC"];
+var PURPOSE_COLORS={TASKING:"#9b59b6",WELFARE:"#2ecc71",TRANSPORT:"#3498db",EVAC:"#e74c3c","":" #5a6a7a"};
+var MONTHS_SHORT=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+var LOCS=["WHITEHOUSE","BEB","RITZ","OUT"];
+var vehicles={},boardNames=[],locList=[];
+var dpRow=-1,dpDay=new Date().getDate(),dpMon=new Date().getMonth(),dpYr=new Date().getFullYear();
+
+function pad(n){return String(n).padStart(2,"0");}
+
+db.ref("vehicles").on("value",function(s){vehicles=s.val()||{};if(document.getElementById("main").style.display==="block")buildTable();});
+db.ref("board").on("value",function(s){var d=s.val()||{};boardNames=Object.values(d).filter(function(r){return r&&r.name;}).map(function(r){return r.name;});});
+db.ref("locations").on("value",function(s){var v=s.val();if(Array.isArray(v))locList=v;});
+
+// Read-only — no writes
+
+function cell(text,color,minWidth){
+  var td=document.createElement("td");
+  td.style.minWidth=minWidth||"90px";
+  var span=document.createElement("span");
+  span.style.cssText="font-family:'Share Tech Mono',monospace;font-size:12px;color:"+(color||"#fff")+";letter-spacing:1px;padding:3px 0;display:inline-block";
+  span.textContent=text||"—";
+  td.appendChild(span);return td;
+}
+
+function buildTable(){
+  var tb=document.getElementById("tbody");tb.innerHTML="";
+  var count=0;
+  for(var i=0;i<100;i++){
+    var v=vehicles[i]||{};
+    if(!v.vrn&&!v.make&&!v.model) continue; // only show populated rows
+    var isWelfare=WELFARE_VRNS.includes((v.vrn||"").trim());
+    var purpose=isWelfare?"WELFARE":(v.purpose||"");
+    var pc=PURPOSE_COLORS[purpose]||"#5a6a7a";
+
+    var tr=document.createElement("tr");
+    tr.appendChild(cell(pad(i+1),"#5a6a7a","32px"));
+    tr.appendChild(cell(v.make||"—","#d4dde8"));
+    tr.appendChild(cell(v.model||"—","#d4dde8"));
+    tr.appendChild(cell(v.colour||"—","#d4dde8"));
+    tr.appendChild(cell(v.vrn||"—","#c9a84c","100px")); // VRN in gold
+    tr.appendChild(cell(v.name||"—","#fff","130px"));
+    tr.appendChild(cell(v.location||"—","#c9a84c","110px"));
+
+    // Purpose with colour
+    var tPurp=document.createElement("td");tPurp.style.minWidth="110px";
+    if(purpose){
+      var pb=document.createElement("div");
+      pb.style.cssText="background:"+pc+"22;border:1px solid "+pc+"55;color:"+pc+";font-family:'Share Tech Mono',monospace;font-size:11px;padding:4px 8px;letter-spacing:1px;display:inline-block";
+      pb.textContent=(isWelfare?"🔒 ":"")+purpose;
+      tPurp.appendChild(pb);
+    }else{
+      var pd=document.createElement("span");pd.style.cssText="color:#2a3440;font-family:'Share Tech Mono',monospace;font-size:11px";pd.textContent="—";
+      tPurp.appendChild(pd);
+    }
+    tr.appendChild(tPurp);
+
+    tr.appendChild(cell(v.dateon||"—","#3498db","100px"));
+    tr.appendChild(cell(v.mileageon?(v.mileageon+" KM"):"—","#d4dde8","100px"));
+
+    tb.appendChild(tr);
+    count++;
+  }
+  document.getElementById("veh-count").textContent=count+" VEHICLES";
+}
+
+// DATE PICKER
+function openDatePicker(rowIdx,currentVal,btn){
+  dpRow=rowIdx;
+  var today=new Date();
+  if(currentVal){var p=currentVal.split("/");dpDay=parseInt(p[0])||today.getDate();dpMon=(parseInt(p[1])-1)||today.getMonth();dpYr=parseInt(p[2])||today.getFullYear();}
+  else{dpDay=today.getDate();dpMon=today.getMonth();dpYr=today.getFullYear();}
+  buildDatePicker();
+  document.getElementById("datepicker").classList.add("show");
+}
+function buildDatePicker(){
+  var today=new Date();
+  var years=[];for(var y=today.getFullYear()-2;y<=today.getFullYear()+2;y++)years.push(y);
+  var daysInMonth=new Date(dpYr,dpMon+1,0).getDate();
+
+  document.getElementById("dp-display").textContent=pad(dpDay)+" "+MONTHS_SHORT[dpMon]+" "+dpYr;
+
+  // Years
+  document.getElementById("dp-years").innerHTML=years.map(function(y){return'<button class="dpbtn'+(y===dpYr?" on":"")+'" onclick="setDPYear('+y+')">'+y+'</button>';}).join("");
+  // Months
+  document.getElementById("dp-months").innerHTML=MONTHS_SHORT.map(function(m,i){return'<button class="dpbtn'+(i===dpMon?" on":"")+'" onclick="setDPMon('+i+')">'+m+'</button>';}).join("");
+  // Days
+  var daysHtml="";for(var d=1;d<=daysInMonth;d++){daysHtml+='<button class="dpbtn'+(d===dpDay?" on":"")+'" onclick="setDPDay('+d+')">'+pad(d)+'</button>';}
+  document.getElementById("dp-days").innerHTML=daysHtml;
+}
+function setDPYear(y){dpYr=y;var dim=new Date(dpYr,dpMon+1,0).getDate();if(dpDay>dim)dpDay=dim;buildDatePicker();}
+function setDPMon(m){dpMon=m;var dim=new Date(dpYr,dpMon+1,0).getDate();if(dpDay>dim)dpDay=dim;buildDatePicker();}
+function setDPDay(d){dpDay=d;buildDatePicker();}
+function confirmDatePick(){confirmDate(pad(dpDay)+"/"+pad(dpMon+1)+"/"+dpYr);}
+function confirmDate(val){
+  wv(dpRow,"dateon",val);
+  vehicles[dpRow]=vehicles[dpRow]||{};vehicles[dpRow].dateon=val;
+  // Update button in table
+  var btns=document.querySelectorAll(".date-btn");
+  var btn=btns[dpRow];
+  if(btn){btn.textContent=val||"— DATE —";btn.className="date-btn"+(val?" has-val":"");}
+  closeDatePicker();
+}
+function closeDatePicker(){document.getElementById("datepicker").classList.remove("show");}
+
+setTimeout(function(){
+  document.getElementById("conn").style.display="none";
+  document.getElementById("main").style.display="block";
+  buildTable();
+},2000);
+</script>
+</body>
+</html>
