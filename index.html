@@ -164,6 +164,44 @@ function TimePicker({time,date,onConfirm,onClear,onClose}){
   );
 }
 
+// Vehicle Date Picker
+function VehicleDatePicker({value, onConfirm, onClose}){
+  const MONTHS=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  const today=new Date();
+  const initParts=(value||"").split("/");
+  const [day,setDay]=React.useState(parseInt(initParts[0])||today.getDate());
+  const [mon,setMon]=React.useState(parseInt(initParts[1])-1>=0?parseInt(initParts[1])-1:today.getMonth());
+  const [yr,setYr]=React.useState(parseInt(initParts[2])||today.getFullYear());
+  const daysInMonth=new Date(yr,mon+1,0).getDate();
+  const fnt="'Share Tech Mono',monospace";
+  const btnS=(sel)=>({background:sel?"rgba(201,168,76,0.2)":"#080a0d",border:"1px solid "+(sel?"#c9a84c":"#1e2630"),color:sel?"#c9a84c":"#5a6a7a",fontFamily:fnt,fontSize:"11px",padding:"5px 7px",cursor:"pointer",minWidth:"36px"});
+  const lbl={fontSize:"9px",color:"#5a6a7a",letterSpacing:"3px",marginBottom:"8px",fontFamily:fnt};
+  const pad=n=>String(n).padStart(2,"0");
+  const years=Array.from({length:5},(_,i)=>today.getFullYear()-2+i);
+  return(
+    <div onClick={e=>e.target===e.currentTarget&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",overflowY:"auto"}}>
+      <div style={{background:"#0f1318",border:"1px solid #c9a84c",width:"100%",maxWidth:"380px",fontFamily:fnt}}>
+        <div style={{background:"#0d1117",borderBottom:"1px solid #7a6330",padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{color:"#c9a84c",fontSize:"11px",letterSpacing:"3px"}}>DATE TAKEN ON</span>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:"#5a6a7a",cursor:"pointer",fontSize:"18px"}}>✕</button>
+        </div>
+        <div style={{padding:"16px 20px"}}>
+          <div style={{textAlign:"center",fontSize:"28px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:"900",color:"#c9a84c",letterSpacing:"4px",marginBottom:"16px"}}>
+            {pad(day)} {MONTHS[mon]} {yr}
+          </div>
+          <div style={{marginBottom:"12px"}}><div style={lbl}>YEAR</div><div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>{years.map(y=><button key={y} onClick={()=>setYr(y)} style={btnS(yr===y)}>{y}</button>)}</div></div>
+          <div style={{marginBottom:"12px"}}><div style={lbl}>MONTH</div><div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>{MONTHS.map((m,i)=><button key={i} onClick={()=>{setMon(i);const dim=new Date(yr,i+1,0).getDate();if(day>dim)setDay(dim);}} style={btnS(mon===i)}>{m}</button>)}</div></div>
+          <div style={{marginBottom:"20px"}}><div style={lbl}>DAY</div><div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>{Array.from({length:daysInMonth},(_,i)=>i+1).map(d=><button key={d} onClick={()=>setDay(d)} style={btnS(day===d)}>{pad(d)}</button>)}</div></div>
+          <div style={{display:"flex",gap:"8px"}}>
+            <button onClick={()=>onConfirm("")} style={{flex:1,background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.4)",color:"#e74c3c",fontFamily:fnt,fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CLEAR</button>
+            <button onClick={()=>onConfirm(pad(day)+"/"+pad(mon+1)+"/"+yr)} style={{flex:2,background:"rgba(201,168,76,0.15)",border:"1px solid #c9a84c",color:"#c9a84c",fontFamily:fnt,fontSize:"12px",letterSpacing:"2px",padding:"10px",cursor:"pointer"}}>CONFIRM</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Vehicles permanently locked to Welfare
 const WELFARE_VRNS = ["131432","421630","421590"];
 const VEHICLE_PURPOSES = ["","TASKING","WELFARE","TRANSPORT","EVAC"];
@@ -191,6 +229,7 @@ function App(){
   const [zulu,setZulu] = useState(zuluNow());
   const [connected,setConnected] = useState(false);
   const [picker,setPicker] = useState(null);
+  const [vehDatePicker,setVehDatePicker] = useState(null); // {idx}
   const [rooms,setRooms] = useState({});
   const [fpNums,setFpNums] = useState({});
   const [evacData,setEvacData] = useState({});
@@ -474,7 +513,7 @@ function App(){
         {tab==="vehicles"&&<>
           <div style={s.hint}>VEHICLE REGISTER — 100 SLOTS</div>
           <div style={s.tw}><table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead><tr>{["#","Make","Model","Colour","VRN","Name / User","Location","Purpose","Date On","Mileage On"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+            <thead><tr>{["#","Make","Model","Colour","VRN","Name / User","Location","Purpose","Date Taken On","KM On Taking"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
             <tbody>{vehicles.map((v,i)=>(
               <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
                 <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
@@ -513,15 +552,25 @@ function App(){
                     }
                   </td>;
                 })()}
-                {/* DATE ON */}
+                {/* DATE TAKEN ON */}
                 <td style={{...s.td,minWidth:"110px"}}>
-                  <input style={{...s.inp,textTransform:"none",fontSize:"11px",letterSpacing:"1px"}} value={v.dateon||""} placeholder="DD/MM/YY" maxLength={10}
-                    onChange={e=>{const val=e.target.value;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],dateon:val};return n;});writeVehicle(i,"dateon",val);}}/>
+                  <button
+                    onClick={()=>setVehDatePicker({idx:i})}
+                    style={{background:"#080a0d",border:"1px solid "+(v.dateon?"#c9a84c55":"#1e2630"),color:v.dateon?"#c9a84c":"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 8px",cursor:"pointer",letterSpacing:"1px",minWidth:"90px",textAlign:"center"}}>
+                    {v.dateon||"— DATE —"}
+                  </button>
                 </td>
-                {/* MILEAGE ON */}
-                <td style={{...s.td,minWidth:"100px"}}>
-                  <input style={{...s.inp,textTransform:"none",fontSize:"11px",letterSpacing:"1px"}} value={v.mileageon||""} placeholder="Miles" maxLength={10}
-                    onChange={e=>{const val=e.target.value.replace(/[^0-9]/g,"");setVehicles(prev=>{const n=[...prev];n[i]={...n[i],mileageon:val};return n;});writeVehicle(i,"mileageon",val);}}/>
+                {/* KM ON TAKING */}
+                <td style={{...s.td,minWidth:"110px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"4px"}}>
+                    <input
+                      style={{...s.inp,textTransform:"none",fontSize:"11px",letterSpacing:"1px",minWidth:"70px"}}
+                      value={v.mileageon||""}
+                      placeholder="e.g. 12450"
+                      maxLength={10}
+                      onChange={e=>{const val=e.target.value.replace(/[^0-9]/g,"");setVehicles(prev=>{const n=[...prev];n[i]={...n[i],mileageon:val};return n;});writeVehicle(i,"mileageon",val);}}/>
+                    <span style={{fontSize:"9px",color:"#5a6a7a",fontFamily:f.mono,flexShrink:0}}>KM</span>
+                  </div>
                 </td>
               </tr>
             ))}</tbody>
@@ -593,6 +642,11 @@ function App(){
           </div>
         </>}
 
+      {vehDatePicker&&<VehicleDatePicker
+        value={vehicles[vehDatePicker.idx]?.dateon||""}
+        onConfirm={val=>{const i=vehDatePicker.idx;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],dateon:val};return n;});writeVehicle(i,"dateon",val);setVehDatePicker(null);}}
+        onClose={()=>setVehDatePicker(null)}
+      />}
       {picker&&<TimePicker time={picker.time} date={picker.date} onConfirm={(t,d)=>{updateRow(picker.idx,"dueBack",t);updateRow(picker.idx,"dueDate",d);setPicker(null);}} onClear={()=>{updateRow(picker.idx,"dueBack","");updateRow(picker.idx,"dueDate","");setPicker(null);}} onClose={()=>setPicker(null)}/>}
 
         {/* ROOMS TAB */}
