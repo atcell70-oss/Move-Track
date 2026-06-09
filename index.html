@@ -164,6 +164,17 @@ function TimePicker({time,date,onConfirm,onClear,onClose}){
   );
 }
 
+// Vehicles permanently locked to Welfare
+const WELFARE_VRNS = ["131432","421630","421590"];
+const VEHICLE_PURPOSES = ["","TASKING","WELFARE","TRANSPORT","EVAC"];
+const PURPOSE_COLOR = {
+  TASKING:{color:"#9b59b6",bg:"rgba(155,89,182,0.15)"},
+  WELFARE:{color:"#2ecc71",bg:"rgba(46,204,113,0.15)"},
+  TRANSPORT:{color:"#3498db",bg:"rgba(52,152,219,0.15)"},
+  EVAC:{color:"#e74c3c",bg:"rgba(231,76,60,0.15)"},
+  "":{color:"#5a6a7a",bg:"transparent"},
+};
+
 // MAIN APP
 function App(){
   const [rows,setRows] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,name:"",location:"",location2:"",status:"",dueBack:"",dueDate:"",notes:""})));
@@ -172,7 +183,7 @@ function App(){
   const [statuses,setStatuses] = useState(DEFAULT_STATUSES);
   const [newStatus,setNewStatus] = useState("");
   const [newLoc2,setNewLoc2] = useState("");
-  const [vehicles,setVehicles] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",location:""})));
+  const [vehicles,setVehicles] = useState(()=>Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",location:"",purpose:"",dateon:"",mileageon:""})));
   const [fuelCards,setFuelCards] = useState(()=>Array.from({length:30},(_,i)=>({id:i+1,cardnum:"",name:"",notes:"",location:""})));
   const [tab,setTab] = useState("board");
   const [newLoc,setNewLoc] = useState("");
@@ -213,7 +224,7 @@ function App(){
     db.ref("statuses").on("value",snap=>{ const v=snap.val(); if(Array.isArray(v)&&v.length>0)setStatuses(v); });
     db.ref("vehicles").on("value",snap=>{
       const data=snap.val()||{};
-      setVehicles(Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",location:"",...(data[i]||{})})));
+      setVehicles(Array.from({length:100},(_,i)=>({id:i+1,make:"",model:"",colour:"",vrn:"",name:"",location:"",purpose:"",dateon:"",mileageon:"",...(data[i]||{})})));
     });
     db.ref("fuelcards").on("value",snap=>{
       const data=snap.val()||{};
@@ -463,7 +474,7 @@ function App(){
         {tab==="vehicles"&&<>
           <div style={s.hint}>VEHICLE REGISTER — 100 SLOTS</div>
           <div style={s.tw}><table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead><tr>{["#","Make","Model","Colour","VRN","Name / User","Location"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+            <thead><tr>{["#","Make","Model","Colour","VRN","Name / User","Location","Purpose","Date On","Mileage On"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
             <tbody>{vehicles.map((v,i)=>(
               <tr key={i} style={{borderBottom:"1px solid rgba(30,38,48,0.7)"}}>
                 <td style={{...s.td,color:"#5a6a7a",fontSize:"11px",width:"28px"}}>{String(i+1).padStart(2,"0")}</td>
@@ -484,6 +495,33 @@ function App(){
                     <option value="">— SELECT —</option>
                     {locs.map(l=><option key={l} value={l}>{l}</option>)}
                   </select>
+                </td>
+                {/* PURPOSE — locked to Welfare for specific VRNs */}
+                {(()=>{
+                  const isWelfareLocked = WELFARE_VRNS.includes((v.vrn||"").replace(/\s/g,"").toUpperCase()) || WELFARE_VRNS.includes((v.vrn||"").replace(/\s/g,""));
+                  const purpose = isWelfareLocked ? "WELFARE" : (v.purpose||"");
+                  const pc = PURPOSE_COLOR[purpose]||PURPOSE_COLOR[""];
+                  return <td style={{...s.td,minWidth:"110px"}}>
+                    {isWelfareLocked
+                      ? <div style={{background:"rgba(46,204,113,0.15)",border:"1px solid rgba(46,204,113,0.4)",color:"#2ecc71",fontFamily:f.mono,fontSize:"11px",padding:"5px 8px",letterSpacing:"1px",display:"flex",alignItems:"center",gap:"6px"}}>
+                          <span style={{fontSize:"9px"}}>🔒</span> WELFARE
+                        </div>
+                      : <select value={purpose} onChange={e=>{const val=e.target.value;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],purpose:val};return n;});writeVehicle(i,"purpose",val);}}
+                          style={{appearance:"none",WebkitAppearance:"none",background:pc.bg,border:"1px solid "+(pc.color+"55"),color:pc.color||"#5a6a7a",fontFamily:f.mono,fontSize:"11px",padding:"5px 8px",cursor:"pointer",outline:"none",width:"100%",borderRadius:"0"}}>
+                          {VEHICLE_PURPOSES.map(p=><option key={p} value={p}>{p||"— SELECT —"}</option>)}
+                        </select>
+                    }
+                  </td>;
+                })()}
+                {/* DATE ON */}
+                <td style={{...s.td,minWidth:"110px"}}>
+                  <input style={{...s.inp,textTransform:"none",fontSize:"11px",letterSpacing:"1px"}} value={v.dateon||""} placeholder="DD/MM/YY" maxLength={10}
+                    onChange={e=>{const val=e.target.value;setVehicles(prev=>{const n=[...prev];n[i]={...n[i],dateon:val};return n;});writeVehicle(i,"dateon",val);}}/>
+                </td>
+                {/* MILEAGE ON */}
+                <td style={{...s.td,minWidth:"100px"}}>
+                  <input style={{...s.inp,textTransform:"none",fontSize:"11px",letterSpacing:"1px"}} value={v.mileageon||""} placeholder="Miles" maxLength={10}
+                    onChange={e=>{const val=e.target.value.replace(/[^0-9]/g,"");setVehicles(prev=>{const n=[...prev];n[i]={...n[i],mileageon:val};return n;});writeVehicle(i,"mileageon",val);}}/>
                 </td>
               </tr>
             ))}</tbody>
