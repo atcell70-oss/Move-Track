@@ -1,0 +1,34 @@
+name: Move-Track Health Check
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check main board
+        run: |
+          curl -L --fail --silent --show-error https://atcell70-oss.github.io/Move-Track/ -o /tmp/index.html
+          grep -qi "Moving" /tmp/index.html
+
+      - name: Check vehicles page
+        run: |
+          curl -L --fail --silent --show-error https://atcell70-oss.github.io/Move-Track/vehicles.html -o /tmp/vehicles.html
+          grep -qi "Vehicle" /tmp/vehicles.html
+
+      - name: Check WH page
+        run: |
+          curl -L --fail --silent --show-error https://atcell70-oss.github.io/Move-Track/wh.html -o /tmp/wh.html
+          grep -qi "Moving" /tmp/wh.html
+
+      - name: Check status page
+        run: |
+          curl -L --fail --silent --show-error https://atcell70-oss.github.io/Move-Track/status.html -o /tmp/status.html
+          grep -qi "MOVE" /tmp/status.html
