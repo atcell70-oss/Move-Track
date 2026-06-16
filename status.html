@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Move-Track Status</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080a0d;color:#d4dde8;font-family:'Share Tech Mono',monospace;min-height:100vh;padding:24px}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(201,168,76,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(201,168,76,0.025) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+main{position:relative;z-index:1;max-width:980px;margin:0 auto}
+h1{font-family:'Barlow Condensed',sans-serif;font-size:34px;letter-spacing:6px;color:#fff;text-transform:uppercase}
+.gold{color:#c9a84c}
+.sub{font-size:10px;color:#5a6a7a;letter-spacing:3px;margin:4px 0 22px;text-transform:uppercase}
+.card{background:#0f1318;border:1px solid #1e2630;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;gap:12px;padding:13px 16px;border-bottom:1px solid rgba(30,38,48,.7);align-items:center}
+.row:last-child{border-bottom:none}
+.label{font-size:11px;color:#8a9aaa;letter-spacing:2px;text-transform:uppercase}
+.value{font-size:12px;color:#fff;text-align:right}
+.ok{color:#2ecc71}.warn{color:#f39c12}.bad{color:#e74c3c}.goldText{color:#c9a84c}
+button,a.btn{display:inline-block;background:rgba(201,168,76,.12);border:1px solid #c9a84c;color:#c9a84c;font-family:'Share Tech Mono',monospace;font-size:12px;letter-spacing:2px;padding:10px 14px;text-decoration:none;cursor:pointer;margin:8px 8px 0 0}
+.small{font-size:10px;color:#5a6a7a;letter-spacing:1px;line-height:1.6;margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+  <h1>MOVE <span class="gold">&</span> TRACK STATUS</h1>
+  <div class="sub">Operational health check // GitHub Pages + Firebase</div>
+
+  <div class="card">
+    <div class="row"><div class="label">Overall</div><div id="overall" class="value warn">CHECKING...</div></div>
+    <div class="row"><div class="label">Page Loaded</div><div id="pageLoaded" class="value ok">OK</div></div>
+    <div class="row"><div class="label">Firebase SDK</div><div id="sdk" class="value warn">CHECKING...</div></div>
+    <div class="row"><div class="label">Database Connection</div><div id="dbconn" class="value warn">CHECKING...</div></div>
+    <div class="row"><div class="label">Board Read</div><div id="board" class="value warn">CHECKING...</div></div>
+    <div class="row"><div class="label">Vehicles Read</div><div id="vehicles" class="value warn">CHECKING...</div></div>
+    <div class="row"><div class="label">Fuel Cards Read</div><div id="fuelcards" class="value warn">CHECKING...</div></div>
+    <div class="row"><div class="label">Rooms Read</div><div id="rooms" class="value warn">CHECKING...</div></div>
+    <div class="row"><div class="label">Last Checked</div><div id="checked" class="value">-</div></div>
+  </div>
+
+  <a class="btn" href="./">Back to Board</a>
+  <a class="btn" href="./vehicles.html">Vehicles</a>
+  <a class="btn" href="./wh.html">WH Shifts</a>
+  <button onclick="location.reload()">Recheck</button>
+
+  <div class="small">
+    If Overall is RED/BAD but Vehicles or WH still work, the issue is probably with the main board front-end.
+    If Firebase reads fail, treat it as database/rules/network related.
+  </div>
+</main>
+
+<script>
+const set = (id, text, cls) => {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "value " + cls;
+};
+const nowStr = () => new Date().toISOString().replace("T"," ").replace(/\.\d+Z$/,"Z");
+
+async function run(){
+  document.getElementById("checked").textContent = nowStr();
+
+  try{
+    if(!window.firebase) throw new Error("Firebase SDK missing");
+    set("sdk","OK","ok");
+  }catch(e){
+    set("sdk","BAD: " + e.message,"bad");
+    set("overall","BAD","bad");
+    return;
+  }
+
+  try{
+    firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
+    const db = firebase.database();
+
+    await db.ref(".info/connected").get().then(snap=>{
+      set("dbconn", snap.val() === true ? "CONNECTED" : "SDK OK / CONNECTION UNKNOWN", snap.val() === true ? "ok" : "warn");
+    });
+
+    const checks = [
+      ["board","board"],
+      ["vehicles","vehicles"],
+      ["fuelcards","fuelcards"],
+      ["rooms","rooms"]
+    ];
+
+    let bad = 0;
+    for(const [id,path] of checks){
+      try{
+        const snap = await db.ref(path).limitToFirst(1).get();
+        set(id, snap.exists() ? "READ OK" : "READ OK / EMPTY", "ok");
+      }catch(e){
+        bad++;
+        set(id, "BAD: " + e.message, "bad");
+      }
+    }
+
+    set("overall", bad === 0 ? "OK" : "DEGRADED", bad === 0 ? "ok" : "warn");
+  }catch(e){
+    set("dbconn","BAD: " + e.message,"bad");
+    set("overall","BAD","bad");
+  }
+}
+run();
+</script>
+</body>
+</html>
