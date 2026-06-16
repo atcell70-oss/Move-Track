@@ -10,7 +10,6 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#c9a84c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,12 +18,6 @@
 // Firebase init OUTSIDE babel so both React and vanilla JS can use it
 firebase.initializeApp({databaseURL:"https://move---track-default-rtdb.europe-west1.firebasedatabase.app"});
 window.db = firebase.database();
-// Register service worker
-if('serviceWorker' in navigator){
-  window.addEventListener('load',function(){
-    navigator.serviceWorker.register('sw.js').catch(function(){});
-  });
-}
 // PWA install prompt
 window.deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', function(e){
