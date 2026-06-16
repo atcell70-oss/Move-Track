@@ -603,8 +603,6 @@ function App(){
           </table></div>
         </>}
 
-      </div>
-
         {tab==="install"&&<>
           <div style={{maxWidth:"400px"}}>
             <div style={{...s.secT,marginTop:"0"}}>INSTALL APP</div>
@@ -702,6 +700,8 @@ function App(){
 
         {/* BAHRAIN MAP TAB */}
         {tab==="map"&&<BahrainMap f={f} rows={rows} locs2={locs2} writeLocs2={writeLocs2} setLocs2={setLocs2}/>}
+
+      </div>
 
       {/* Install popup - shows once, dismissed if already installed */}
       {installable&&!installed&&tab!=="install"&&<InstallBanner onInstall={()=>{if(window.deferredInstallPrompt){window.deferredInstallPrompt.prompt();window.deferredInstallPrompt.userChoice.then(r=>{if(r.outcome==="accepted"){setInstalled(true);setInstallable(false);}});}}} onDismiss={()=>setInstallable(false)} f={f}/>}
